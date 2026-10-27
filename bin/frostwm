@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+BASE="${HOME}/.local/share/frostwm"
+SERVICE="frostwm.service"
+SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/frostwm.sock"
+cmd="${1:-status}"
+shift || true
+
+send() {
+  python - "$SOCK" "$1" <<'PY'
+import socket, sys
+s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(1)
+try:
+    s.connect(sys.argv[1])
+    s.sendall(sys.argv[2].encode())
+    print(s.recv(4096).decode())
+except Exception:
+    raise SystemExit(1)
+finally:
+    s.close()
+PY
+}
+service_active() { systemctl --user is-active --quiet "$SERVICE"; }
+
+case "$cmd" in
+  start)
+    # Pass this Wayland session's environment to the user service manager.
+    systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR NIRI_SOCKET DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
+    if service_active; then
+      echo "FrostWM is already running."
+    else
+      systemctl --user start "$SERVICE"
+      for _ in {1..30}; do
+        if service_active && [[ -S "$SOCK" ]]; then
+          echo "FrostWM started (Cozy Winter)."
+          exit 0
+        fi
+        sleep 0.1
+      done
+      echo "FrostWM service started, but its control socket did not appear. Check: journalctl --user -u frostwm -n 60" >&2
+      exit 1
+    fi
+    ;;
+  stop)
+    if service_active; then
+      systemctl --user stop "$SERVICE"
+      echo "FrostWM stopped."
+    else
+      echo "FrostWM is not running."
+    fi
+    ;;
+  restart)
+    systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR NIRI_SOCKET DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
+    systemctl --user restart "$SERVICE"
+    echo "FrostWM restarted."
+    ;;
+  enable)
+    systemctl --user enable "$SERVICE"
+    echo "FrostWM will start at login."
+    ;;
+  disable-startup)
+    systemctl --user disable "$SERVICE"
+    echo "FrostWM will no longer start automatically."
+    ;;
+  toggle|on|off|gust|clear|status)
+    if ! service_active; then
+      if [[ "$cmd" == "status" ]]; then echo "FrostWM service is stopped."; exit 0; fi
+      echo "FrostWM service isn't running. Start it with: frostwm start" >&2
+      exit 1
+    fi
+    if [[ "$cmd" == "status" ]]; then
+      send status || { echo "FrostWM is running but its control socket isn't ready."; exit 1; }
+    else
+      send "$cmd"
+    fi
+    ;;
+  intensity)
+    [[ $# -eq 1 ]] || { echo "Usage: frostwm intensity 0..100" >&2; exit 2; }
+    send "density $1"
+    ;;
+  wind)
+    [[ $# -eq 1 ]] || { echo "Usage: frostwm wind 0..100" >&2; exit 2; }
+    send "wind $1"
+    ;;
+  logs)
+    journalctl --user -u "$SERVICE" -n "${1:-60}" --no-pager
+    ;;
+  *)
+    cat <<'HELP'
+FrostWM controls (no terminal needs to remain open):
+  frostwm start           Start the overlay
+  frostwm stop            Stop it safely
+  frostwm toggle          Toggle snowfall on/off
+  frostwm on | off        Enable/disable snowfall
+  frostwm status          Show current settings/status
+  frostwm gust            Trigger a wind gust
+  frostwm intensity 0-100 Set snow density
+  frostwm wind 0-100      Set wind strength
+  frostwm enable          Start automatically at login
+  frostwm disable-startup Disable automatic login start
+  frostwm restart         Restart overlay
+  frostwm logs [lines]    Read service logs
+HELP
+    ;;
+esac
