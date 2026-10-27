@@ -1,0 +1,480 @@
+#!/usr/bin/env python3
+"""FrostWM 0.4 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
+import json
+import math
+import os
+import random
+import signal
+import socket
+import subprocess
+import threading
+import time
+from pathlib import Path
+
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("GtkLayerShell", "0.1")
+from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
+import cairo
+
+CFG_PATH = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "frostwm/config.json"
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+DEFAULTS = {
+    "enabled": True,
+    "style": "Cozy Winter",
+    "intensity": 50,
+    "wind_strength": 25,
+    "fps": 30,
+    "max_particles": 260,
+    "min_speed": 18.0,
+    "max_speed": 72.0,
+    "flake_min_radius": 0.7,
+    "flake_max_radius": 2.5,
+    "opacity": 0.82,
+    "close_burst": True,
+    "window_ledges": True,
+    "ledge_target_depth": 4,
+    "ledge_max_depth": 8,
+    "mouse_effects": True,
+    "socket": str(RUNTIME_DIR / "frostwm.sock"),
+}
+
+def load_config():
+    CFG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    cfg = DEFAULTS.copy()
+    try:
+        user_cfg = json.loads(CFG_PATH.read_text())
+        if isinstance(user_cfg, dict):
+            cfg.update(user_cfg)
+    except FileNotFoundError:
+        CFG_PATH.write_text(json.dumps(cfg, indent=2) + "\n")
+    except Exception as exc:
+        print(f"FrostWM: config read error: {exc}", flush=True)
+    cfg["intensity"] = max(0, min(100, int(cfg.get("intensity", 50))))
+    cfg["wind_strength"] = max(0, min(100, int(cfg.get("wind_strength", 25))))
+    cfg["max_particles"] = max(1, min(1000, int(cfg.get("max_particles", 260))))
+    cfg["particles"] = round(cfg["max_particles"] * cfg["intensity"] / 100)
+    cfg["fps"] = max(10, min(60, int(cfg.get("fps", 30))))
+    cfg["ledge_target_depth"] = max(1, min(8, int(cfg.get("ledge_target_depth", 4))))
+    cfg["ledge_max_depth"] = max(cfg["ledge_target_depth"], min(8, int(cfg.get("ledge_max_depth", 8))))
+    cfg["socket"] = str(RUNTIME_DIR / "frostwm.sock")
+    return cfg
+
+class Flake:
+    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "alpha", "warm")
+    def __init__(self, w, h, cfg, anywhere=False):
+        self.x = random.uniform(0, max(1, w))
+        self.y = random.uniform(0, max(1, h)) if anywhere else random.uniform(-h * .15, 0)
+        self.r = random.uniform(cfg["flake_min_radius"], cfg["flake_max_radius"])
+        self.vy = random.uniform(cfg["min_speed"], cfg["max_speed"])
+        self.vx = random.uniform(-8, 8)
+        self.phase = random.random() * math.tau
+        self.alpha = random.uniform(.35, 1.0)
+        self.warm = random.random() < .10
+
+class FrostWM(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="FrostWM")
+        self.cfg = load_config()
+        self.set_decorated(False)
+        self.set_resizable(False)
+        self.set_app_paintable(True)
+        self.set_accept_focus(False)
+        self.set_focus_on_map(False)
+        visual = self.get_screen().get_rgba_visual()
+        if visual:
+            self.set_visual(visual)
+
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_namespace(self, "frostwm")
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.NONE)
+        GtkLayerShell.set_exclusive_zone(self, -1)
+        for edge in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.BOTTOM,
+                     GtkLayerShell.Edge.LEFT, GtkLayerShell.Edge.RIGHT):
+            GtkLayerShell.set_anchor(self, edge, True)
+
+        self.flakes = []
+        self.width, self.height = 1, 1
+        self.last = time.monotonic()
+        self.wind = self.cfg["wind_strength"] * .40  # up to 40 logical px/s
+        self.gust = 0.0
+        self.enabled = bool(self.cfg["enabled"])
+        self.windows = {}
+        self.bursts = []
+        self._cmd_server = None
+        self._socket_path = Path(self.cfg["socket"])
+        self._stopping = False
+        self.mouse_x, self.mouse_y = -10000.0, -10000.0
+        self.mouse_seen = False
+
+        self.connect("draw", self.on_draw)
+        self.connect("realize", self.on_realize)
+        self.connect("map-event", self.on_map)
+        self._fill_particles()
+        self._start_ipc()
+        GLib.timeout_add(max(10, int(1000 / self.cfg["fps"])), self.tick)
+        GLib.timeout_add(180, self.poll_commands)
+        signal.signal(signal.SIGTERM, self._signal_stop)
+        signal.signal(signal.SIGINT, self._signal_stop)
+
+    def _signal_stop(self, *_):
+        GLib.idle_add(self.stop_cleanly)
+
+    def stop_cleanly(self):
+        if self._stopping:
+            return GLib.SOURCE_REMOVE
+        self._stopping = True
+        try:
+            if self._cmd_server:
+                self._cmd_server.close()
+                self._cmd_server = None
+        except Exception:
+            pass
+        try:
+            self._socket_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        Gtk.main_quit()
+        return GLib.SOURCE_REMOVE
+
+    def _set_passthrough(self, *_):
+        # Verified by the user on their GTK3/GdkWayland/Niri setup.
+        gw = self.get_window()
+        if not gw:
+            return
+        try:
+            gw.set_pass_through(True)
+        except Exception as exc:
+            print(f"FrostWM: set_pass_through failed: {exc}", flush=True)
+        try:
+            gw.input_shape_combine_region(cairo.Region(), 0, 0)
+        except Exception as exc:
+            print(f"FrostWM: empty input region failed: {exc}", flush=True)
+
+    def on_realize(self, *_):
+        self._set_passthrough()
+        GLib.idle_add(self._set_passthrough)
+
+    def on_map(self, *_):
+        self._set_passthrough()
+        GLib.idle_add(self._set_passthrough)
+        return False
+
+    def _fill_particles(self):
+        count = self.cfg["particles"] if self.enabled else 0
+        while len(self.flakes) < count:
+            self.flakes.append(Flake(self.width, self.height, self.cfg, anywhere=True))
+        self.flakes = self.flakes[:count]
+
+    def _start_ipc(self):
+        threading.Thread(target=self._ipc_worker, daemon=True, name="frostwm-niri-ipc").start()
+
+    def _ipc_worker(self):
+        while not self._stopping:
+            if not os.environ.get("NIRI_SOCKET"):
+                time.sleep(2)
+                continue
+            proc = None
+            try:
+                proc = subprocess.Popen(
+                    ["niri", "msg", "--json", "event-stream"],
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                )
+                assert proc.stdout is not None
+                for line in proc.stdout:
+                    if self._stopping:
+                        break
+                    try:
+                        event = json.loads(line)
+                    except Exception:
+                        continue
+                    GLib.idle_add(self.handle_niri_event, event)
+            except Exception as exc:
+                print(f"FrostWM: Niri IPC reconnect: {exc}", flush=True)
+            finally:
+                if proc and proc.poll() is None:
+                    proc.terminate()
+            time.sleep(2)
+
+    @staticmethod
+    def _window_rect(win):
+        if not isinstance(win, dict):
+            return {}
+        for key in ("layout", "rect", "geometry", "window_rect"):
+            value = win.get(key)
+            if isinstance(value, dict) and any(k in value for k in ("x", "y", "width", "height")):
+                return value
+        return win if any(k in win for k in ("x", "y", "width", "height")) else {}
+
+    def handle_niri_event(self, event):
+        if not isinstance(event, dict):
+            return GLib.SOURCE_REMOVE
+        name, payload = next(iter(event.items()), ("", {}))
+        key = str(name).lower().replace("_", "")
+        data = payload if isinstance(payload, dict) else {}
+        win = data.get("window", data)
+        wid = str(win.get("id", data.get("id", ""))) if isinstance(win, dict) else ""
+        rect = self._window_rect(win)
+        if "windowclosed" in key or "windowremoved" in key:
+            old = self.windows.pop(wid, None)
+            if self.cfg.get("close_burst", True):
+                rect = rect or (old or {})
+                try:
+                    x = float(rect.get("x", self.width / 2))
+                    y = float(rect.get("y", self.height / 2))
+                    width = float(rect.get("width", 120))
+                except Exception:
+                    x, y, width = self.width / 2, self.height / 2, 120
+                self.bursts.append({"x": x + width / 2, "y": y, "n": 22, "age": 0.0})
+        elif "windowopened" in key or "windowlayoutchanged" in key or "windowchanged" in key:
+            if wid and rect:
+                old = self.windows.get(wid, {})
+                self.windows[wid] = {
+                    "x": rect.get("x", old.get("x", 0)),
+                    "y": rect.get("y", old.get("y", 0)),
+                    "width": rect.get("width", old.get("width", 0)),
+                    "height": rect.get("height", old.get("height", 0)),
+                    "depth": old.get("depth", 0.8),
+                }
+        return GLib.SOURCE_REMOVE
+
+    def poll_commands(self):
+        if self._stopping:
+            return GLib.SOURCE_REMOVE
+        try:
+            if self._cmd_server is None:
+                self._socket_path.parent.mkdir(parents=True, exist_ok=True)
+                self._socket_path.unlink(missing_ok=True)
+                self._cmd_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                self._cmd_server.bind(str(self._socket_path))
+                os.chmod(self._socket_path, 0o600)
+                self._cmd_server.listen(8)
+                self._cmd_server.setblocking(False)
+            try:
+                conn, _ = self._cmd_server.accept()
+            except BlockingIOError:
+                conn = None
+            if conn is not None:
+                with conn:
+                    conn.settimeout(.2)
+                    cmd = conn.recv(1024).decode(errors="ignore").strip()
+                    reply = self.handle_command(cmd)
+                    if reply:
+                        conn.sendall(reply.encode())
+        except Exception as exc:
+            print(f"FrostWM: control socket: {exc}", flush=True)
+        return GLib.SOURCE_CONTINUE
+
+    def handle_command(self, cmd):
+        if cmd == "toggle":
+            self.enabled = not self.enabled
+            self.cfg["enabled"] = self.enabled
+            self._fill_particles()
+            self.save_config()
+            return "on" if self.enabled else "off"
+        if cmd in ("on", "enable", "start-effect"):
+            self.enabled = True
+            self.cfg["enabled"] = True
+            self._fill_particles()
+            self.save_config()
+            return "on"
+        if cmd in ("off", "disable", "stop-effect"):
+            self.enabled = False
+            self.cfg["enabled"] = False
+            self._fill_particles()
+            self.save_config()
+            return "off"
+        if cmd == "gust":
+            self.gust = random.choice([-1, 1]) * random.uniform(35, 90)
+            return "ok"
+        if cmd.startswith("density "):
+            try:
+                self.cfg["intensity"] = max(0, min(100, int(cmd.split()[1])))
+                self.cfg["particles"] = round(self.cfg["max_particles"] * self.cfg["intensity"] / 100)
+                self._fill_particles()
+                self.save_config()
+                return str(self.cfg["intensity"])
+            except (ValueError, IndexError):
+                return "error"
+        if cmd.startswith("wind "):
+            try:
+                self.cfg["wind_strength"] = max(0, min(100, int(cmd.split()[1])))
+                self.wind = self.cfg["wind_strength"] * .40
+                self.save_config()
+                return str(self.cfg["wind_strength"])
+            except (ValueError, IndexError):
+                return "error"
+        if cmd == "status":
+            return json.dumps({
+                "enabled": self.enabled, "style": self.cfg["style"],
+                "intensity": self.cfg["intensity"], "wind": self.cfg["wind_strength"],
+                "mouse_effects": self.cfg["mouse_effects"],
+                "window_ledges": self.cfg["window_ledges"],
+            })
+        if cmd == "clear":
+            self.windows.clear()
+            self.bursts.clear()
+            return "ok"
+        if cmd == "quit":
+            GLib.idle_add(self.stop_cleanly)
+            return "stopping"
+        return "unknown command"
+
+    def save_config(self):
+        try:
+            CFG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            CFG_PATH.write_text(json.dumps(self.cfg, indent=2) + "\n")
+        except Exception as exc:
+            print(f"FrostWM: couldn't save config: {exc}", flush=True)
+
+    def _update_mouse_position(self):
+        if not self.cfg.get("mouse_effects", True):
+            self.mouse_seen = False
+            return
+        try:
+            display = Gdk.Display.get_default()
+            seat = display.get_default_seat() if display else None
+            pointer = seat.get_pointer() if seat else None
+            if pointer:
+                screen, x, y = pointer.get_position()
+                # Single-output prototype: global coordinates can be negative on other monitors.
+                self.mouse_x, self.mouse_y = float(x), float(y)
+                self.mouse_seen = True
+        except Exception:
+            pass
+
+    def tick(self):
+        if self._stopping:
+            return GLib.SOURCE_REMOVE
+        now = time.monotonic()
+        dt = min(.08, now - self.last)
+        self.last = now
+        alloc = self.get_allocation()
+        w, h = max(1, alloc.width), max(1, alloc.height)
+        if (w, h) != (self.width, self.height):
+            oldw, oldh = self.width, self.height
+            self.width, self.height = w, h
+            if oldw > 1 and oldh > 1:
+                for f in self.flakes:
+                    f.x *= w / oldw
+                    f.y *= h / oldh
+            self._fill_particles()
+        self._update_mouse_position()
+        if self.enabled:
+            self._fill_particles()
+            self.gust *= max(0, 1 - dt * .55)
+            for f in self.flakes:
+                f.phase += dt * 1.7
+                wind_noise = math.sin(f.phase) * 5
+                f.x += (f.vx + self.wind + self.gust + wind_noise) * dt
+                f.y += f.vy * dt
+                # Interactive flakes bend gently around the cursor without taking input.
+                if self.mouse_seen and self.cfg.get("mouse_effects", True):
+                    dx, dy = f.x - self.mouse_x, f.y - self.mouse_y
+                    d2 = dx * dx + dy * dy
+                    if 1 < d2 < 95 * 95:
+                        d = math.sqrt(d2)
+                        force = (1 - d / 95) * 85 * dt
+                        f.x += (dx / d) * force
+                        f.y += (dy / d) * force * .45
+                if f.y > self.height + 5:
+                    f.y = random.uniform(-30, -2)
+                    f.x = random.uniform(0, self.width)
+                if f.x < -5:
+                    f.x = self.width + 4
+                elif f.x > self.width + 5:
+                    f.x = -4
+            for b in self.bursts:
+                b["age"] += dt
+                b["n"] = max(0, b["n"] - dt * 12)
+            self.bursts = [b for b in self.bursts if b["age"] < 1.8 and b["n"] > 0]
+            if self.cfg.get("window_ledges", True):
+                for win in self.windows.values():
+                    win["depth"] = min(float(self.cfg["ledge_target_depth"]), float(win.get("depth", .8)) + dt * .15)
+        self.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    def on_draw(self, _widget, cr):
+        cr.set_operator(cairo.OPERATOR_CLEAR)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+        if not self.enabled:
+            return False
+
+        cozy = str(self.cfg.get("style", "Cozy Winter")).lower() == "cozy winter"
+        # Subtle, warm bokeh at the very edges; transparent elsewhere.
+        if cozy:
+            for i, (x, y, radius, alpha) in enumerate((
+                (self.width * .06, self.height * .08, 90, .025),
+                (self.width * .93, self.height * .13, 115, .022),
+                (self.width * .12, self.height * .92, 100, .018),
+            )):
+                pat = cairo.RadialGradient(x, y, 0, x, y, radius)
+                pat.add_color_stop_rgba(0, .98, .69, .38, alpha)
+                pat.add_color_stop_rgba(1, .98, .69, .38, 0)
+                cr.set_source(pat)
+                cr.paint()
+
+        for f in self.flakes:
+            if cozy and f.warm:
+                cr.set_source_rgba(1.0, .88, .70, self.cfg["opacity"] * f.alpha)
+            else:
+                cr.set_source_rgba(.98, .98, .94 if cozy else 1.0, self.cfg["opacity"] * f.alpha)
+            cr.arc(f.x, f.y, f.r, 0, math.tau)
+            cr.fill()
+            if f.r > 1.8:
+                cr.set_source_rgba(1, 1, 1, .28)
+                cr.set_line_width(.6)
+                cr.move_to(f.x - f.r * 2, f.y)
+                cr.line_to(f.x + f.r * 2, f.y)
+                cr.stroke()
+
+        # Soft cursor halo, drawn only; input remains entirely click-through.
+        if self.mouse_seen and self.cfg.get("mouse_effects", True):
+            halo = cairo.RadialGradient(self.mouse_x, self.mouse_y, 2, self.mouse_x, self.mouse_y, 60)
+            halo.add_color_stop_rgba(0, 1.0, .86, .66, .055 if cozy else .025)
+            halo.add_color_stop_rgba(1, 1.0, .86, .66, 0)
+            cr.set_source(halo)
+            cr.paint()
+
+        for b in self.bursts:
+            t = b["age"]
+            for i in range(min(int(b["n"]), 30)):
+                x = b["x"] + math.sin(i * 12.989) * i * 1.1
+                y = b["y"] + t * 65 + (i % 7) * t * 15
+                cr.set_source_rgba(1.0, .92, .78, max(0, 1 - t / 1.8))
+                cr.arc(x, y, .7 + (i % 3) * .4, 0, math.tau)
+                cr.fill()
+
+        # Accumulation along reported top edges; depth grows gently to the configured target.
+        if self.cfg.get("window_ledges", True):
+            for win in self.windows.values():
+                try:
+                    x, y, width = float(win["x"]), float(win["y"]), float(win["width"])
+                    depth = max(1.0, min(float(self.cfg["ledge_max_depth"]), float(win.get("depth", 1))))
+                    if width > 20 and -8 < y < self.height:
+                        cr.set_source_rgba(1.0, .96, .87, .88)
+                        cr.set_line_width(depth)
+                        cr.move_to(x, y + depth / 2)
+                        cr.line_to(x + width, y + depth / 2)
+                        cr.stroke()
+                        # tiny rounded snow mounds
+                        cr.set_source_rgba(1, .99, .94, .92)
+                        for j in range(max(1, int(width // 70))):
+                            mx = x + (j + .5) * width / max(1, int(width // 70))
+                            cr.arc(mx, y, depth * .6, math.pi, math.tau)
+                            cr.fill()
+                except (KeyError, TypeError, ValueError):
+                    continue
+        return False
+
+def main():
+    app = FrostWM()
+    app.show_all()
+    app._set_passthrough()
+    Gtk.main()
+    app.stop_cleanly()
+
+if __name__ == "__main__":
+    main()

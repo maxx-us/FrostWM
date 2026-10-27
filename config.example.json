@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "style": "Cozy Winter",
+  "intensity": 50,
+  "wind_strength": 25,
+  "fps": 30,
+  "max_particles": 260,
+  "min_speed": 18.0,
+  "max_speed": 72.0,
+  "flake_min_radius": 0.7,
+  "flake_max_radius": 2.5,
+  "opacity": 0.82,
+  "close_burst": true,
+  "window_ledges": true,
+  "ledge_target_depth": 4,
+  "ledge_max_depth": 8,
+  "mouse_effects": true
+}
