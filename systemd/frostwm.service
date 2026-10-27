@@ -1,0 +1,16 @@
+[Unit]
+Description=FrostWM cozy winter desktop overlay
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/frostwm/frostwm.py
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=4
+KillSignal=SIGTERM
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
