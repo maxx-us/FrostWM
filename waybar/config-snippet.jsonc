@@ -1,0 +1,9 @@
+// Merge into Waybar config; add "custom/frostwm" to the module list.
+"custom/frostwm": {
+  "exec": "~/.config/waybar/scripts/frostwm status",
+  "return-type": "json",
+  "interval": 3,
+  "on-click": "~/.config/waybar/scripts/frostwm toggle",
+  "on-click-right": "~/.config/waybar/scripts/frostwm gust",
+  "tooltip": true
+}
