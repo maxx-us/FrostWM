@@ -26,11 +26,11 @@ DEFAULTS = {
     "intensity": 50,
     "wind_strength": 25,
     "fps": 60,
-    "max_particles": 260,
+    "max_particles": 360,
     "min_speed": 18.0,
     "max_speed": 72.0,
-    "flake_min_radius": 0.7,
-    "flake_max_radius": 2.5,
+    "flake_min_radius": 1.1,
+    "flake_max_radius": 3.4,
     "opacity": 0.82,
     "close_burst": True,
     "window_ledges": True,
@@ -44,21 +44,21 @@ DEFAULTS = {
 PRESETS = {
     "gentle": {
         "style": "Gentle Snow", "intensity": 22, "wind_strength": 8,
-        "fps": 45, "max_particles": 220, "min_speed": 10.0,
+        "fps": 45, "max_particles": 280, "min_speed": 10.0,
         "max_speed": 34.0, "flake_min_radius": 0.6,
-        "flake_max_radius": 1.8, "opacity": 0.62,
+        "flake_max_radius": 2.5, "opacity": 0.78,
         "close_burst": False, "window_ledges": False, "mouse_effects": False,
     },
     "cozy": {
         "style": "Cozy Winter", "intensity": 35, "wind_strength": 25,
-        "fps": 60, "max_particles": 260, "min_speed": 18.0,
+        "fps": 60, "max_particles": 360, "min_speed": 18.0,
         "max_speed": 72.0, "flake_min_radius": 0.7,
-        "flake_max_radius": 2.5, "opacity": 0.82,
+        "flake_max_radius": 3.4, "opacity": 0.90,
         "close_burst": True, "window_ledges": True, "mouse_effects": True,
     },
     "blizzard": {
         "style": "Blizzard", "intensity": 90, "wind_strength": 78,
-        "fps": 60, "max_particles": 420, "min_speed": 38.0,
+        "fps": 60, "max_particles": 500, "min_speed": 38.0,
         "max_speed": 125.0, "flake_min_radius": 0.9,
         "flake_max_radius": 3.0, "opacity": 0.94,
         "close_burst": True, "window_ledges": True, "mouse_effects": True,
@@ -87,7 +87,7 @@ def load_config():
     return cfg
 
 class Flake:
-    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "rotation", "alpha", "warm", "shape", "stretch")
+    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "rotation", "alpha", "warm", "shape", "stretch", "landed_window")
     def __init__(self, w, h, cfg, anywhere=False):
         self.x = random.uniform(0, max(1, w))
         self.y = random.uniform(0, max(1, h)) if anywhere else random.uniform(-h * .15, 0)
@@ -103,7 +103,8 @@ class Flake:
             weights=(18, 36, 20, 12, 14), k=1
         )[0]
         self.stretch = random.uniform(1.35, 2.2)
-        self.alpha = random.uniform(.35, 1.0)
+        self.alpha = random.uniform(.62, 1.0)
+        self.landed_window = None
         self.warm = random.random() < .10
 
 class FrostWM(Gtk.Window):
@@ -587,10 +588,41 @@ class FrostWM(Gtk.Window):
             self._fill_particles()
             self.gust *= max(0, 1 - dt * .55)
             for f in self.flakes:
+                if f.landed_window is not None:
+                    landed = self.windows.get(str(f.landed_window))
+                    if landed is None:
+                        f.landed_window = None
+                        f.vy = random.uniform(self.cfg["min_speed"], self.cfg["max_speed"])
+                        f.y = random.uniform(-24, -3)
+                    else:
+                        # Keep settled snow attached to the top edge as the
+                        # window moves or resizes; release it when the window closes.
+                        f.x = max(float(landed["x"]), min(float(landed["x"]) + float(landed["width"]), f.x))
+                        f.y = float(landed["y"]) - max(1.0, f.r * 0.7)
+                        continue
                 f.phase += dt * 1.7
                 wind_noise = math.sin(f.phase) * 5
+                previous_y = f.y
                 f.x += (f.vx + self.wind + self.gust + wind_noise) * dt
                 f.y += f.vy * dt
+                # Catch flakes crossing a visible window's top edge. Without
+                # this, the overlay draws snow over glass and it looks like
+                # particles simply fall through the window.
+                if self.cfg.get("window_ledges", True):
+                    for wid, win in self.windows.items():
+                        try:
+                            wx, wy = float(win["x"]), float(win["y"])
+                            ww = float(win["width"])
+                            if (ww > 20 and wx <= f.x <= wx + ww
+                                    and previous_y <= wy <= f.y
+                                    and -2 <= wy < self.height):
+                                f.y = wy - max(1.0, f.r * 0.7)
+                                f.landed_window = wid
+                                win["depth"] = min(float(self.cfg["ledge_max_depth"]),
+                                                   float(win.get("depth", 1.0)) + 0.25)
+                                break
+                        except (KeyError, TypeError, ValueError):
+                            continue
                 # Ambient swirls create mouse-like snow motion without pointer access.
                 if self.cfg.get("mouse_effects", True):
                     self._apply_ambient_wakes(f, dt)
@@ -641,7 +673,7 @@ class FrostWM(Gtk.Window):
 
             # Shape variety is intentional: real snow crystals form in many
             # patterns, and distant particles remain simple soft specks.
-            if f.shape == "speck" or f.r < 0.8:
+            if f.shape == "speck" or f.r < 1.15:
                 cr.arc(f.x, f.y, max(.45, f.r), 0, math.tau)
                 cr.fill()
                 continue
@@ -651,10 +683,10 @@ class FrostWM(Gtk.Window):
             cr.rotate(f.rotation + math.sin(f.phase) * 0.12)
             cr.set_line_cap(cairo.LINE_CAP_ROUND)
             cr.set_line_join(cairo.LINE_JOIN_ROUND)
-            cr.set_line_width(max(.5, f.r * .22))
+            cr.set_line_width(max(.8, f.r * .30))
 
             if f.shape == "crystal":
-                arm = max(2.3, f.r * 2.45)
+                arm = max(3.0, f.r * 2.8)
                 branch = arm * .34
                 for arm_index in range(6):
                     angle = arm_index * math.tau / 6
@@ -670,7 +702,7 @@ class FrostWM(Gtk.Window):
                 cr.stroke()
             elif f.shape == "plate":
                 # Flat, angular plate with six sides and a faint inner facet.
-                radius = max(1.5, f.r * 1.9)
+                radius = max(2.0, f.r * 2.15)
                 cr.move_to(radius, 0)
                 for i in range(1, 6):
                     a = i * math.tau / 6
@@ -685,7 +717,7 @@ class FrostWM(Gtk.Window):
                 cr.stroke()
             elif f.shape == "needle":
                 # Long, slender ice crystal, with a tiny crossbar.
-                length = max(3.0, f.r * 4.2)
+                length = max(4.0, f.r * 4.8)
                 cr.move_to(-length, 0)
                 cr.line_to(length, 0)
                 cr.move_to(-length * .25, -f.r * .65)
@@ -694,7 +726,7 @@ class FrostWM(Gtk.Window):
                 cr.line_to(length * .3, f.r * .65)
                 cr.stroke()
             else:  # cluster: three intersecting crystalline arms
-                length = max(2.2, f.r * 2.15)
+                length = max(3.0, f.r * 2.45)
                 for arm_index in range(3):
                     angle = arm_index * math.pi / 3
                     ux, uy = math.cos(angle), math.sin(angle)
@@ -706,7 +738,7 @@ class FrostWM(Gtk.Window):
 
             # A small core catches the light without making every flake a dot.
             cr.set_source_rgba(1.0, 1.0, 1.0, min(1.0, alpha * .92))
-            cr.arc(0, 0, max(.35, f.r * .20), 0, math.tau)
+            cr.arc(0, 0, max(.45, f.r * .24), 0, math.tau)
             cr.fill()
             cr.restore()
 
