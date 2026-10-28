@@ -1,30 +1,44 @@
 # FrostWM 0.4 — Cozy Winter
 
-FrostWM is a transparent, click-through snow overlay for GTK3 + gtk-layer-shell + Niri.
+FrostWM is a transparent, click-through snowfall overlay for GTK3, gtk-layer-shell, and Niri. Bring a cozy winter atmosphere to your desktop with animated snow, interactive mouse effects, and snow accumulation along window edges.
 
-## Defaults in 0.4
+## ✨ Features and defaults
 
 - Snowfall enabled
-- Style: **Cozy Winter** (cream-white flakes, a few warm flakes, subtle amber edge glow)
-- Intensity: **50%** (130 particles when max is 260)
+- Style: **Cozy Winter** — cream-white flakes, a few warm flakes, and subtle amber edge glow
+- Intensity: **50%** (130 particles when the maximum is 260)
 - Wind: **25%**
-- Window-edge accumulation enabled, target 4 px, hard maximum 8 px
-- Interactive mouse effects enabled: flakes gently bend around the pointer and a very subtle warm halo follows it
+- Window-edge accumulation enabled, with a 4 px target and 8 px hard maximum
+- Interactive mouse effects: flakes gently bend around the pointer, with a subtle warm halo
 - Window-close snow bursts enabled
-- Verified input-passthrough combination retained: `Gdk.Window.set_pass_through(True)` plus an empty Cairo input region, applied after realize/map
-- User service for background operation, safe stop, and journal logs
+- Click-through input handling using `Gdk.Window.set_pass_through(True)` and an empty Cairo input region, applied after realize/map
+- User systemd service for background operation, safe shutdown, and journal logs
+
+## 🚀 Quick install — one command
+
+On CachyOS or another compatible Linux system, open a terminal and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maxx-us/FrostWM/main/install-remote.sh -o /tmp/frostwm-install.sh && bash /tmp/frostwm-install.sh; result=$?; rm -f /tmp/frostwm-install.sh; exit "$result"
+```
+
+This downloads and runs the remote installer, which fetches the latest source from the repository and runs `install.sh`.
+
+**Requirements:** `curl` or `wget`, `tar`, Python 3, GTK3, PyGObject, PyCairo, and gtk-layer-shell. The remote installer does not use `sudo`; install missing system dependencies separately.
+
+> **Repository setup:** Commit `install-remote.sh` to the root of the `main` branch before sharing the one-command installation link. Review the script before running it if you want to inspect what it does.
 
 ## Dependencies
 
-On CachyOS, install if missing:
+On CachyOS, install any missing dependencies with:
 
 ```bash
 sudo pacman -S python python-gobject gtk3 python-cairo gtk-layer-shell
 ```
 
-## Install
+## Manual installation
 
-Extract the archive, open a terminal in the extracted `frostwm-0.4` directory, then:
+If you downloaded the source archive manually, extract it, open a terminal in the extracted `frostwm-0.4` directory, and run:
 
 ```bash
 ./install.sh
@@ -32,13 +46,13 @@ Extract the archive, open a terminal in the extracted `frostwm-0.4` directory, t
 
 No terminal needs to stay open. FrostWM runs as a user systemd service.
 
-If `~/.local/bin` is not already in your zsh PATH, add this line to `~/.zshrc`:
+If `~/.local/bin` is not already in your Zsh PATH, add this line to `~/.zshrc`:
 
 ```zsh
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Then reload zsh:
+Then reload Zsh:
 
 ```zsh
 source ~/.zshrc
@@ -64,44 +78,20 @@ frostwm restart         # Restart service
 frostwm logs            # Show recent service logs
 ```
 
-`frostwm stop` stops the service; `frostwm off` only hides snowfall, leaving the service running for quick toggles. `frostwm enable` enables service startup but doesn't start it immediately unless `frostwm start` is run too.
+`frostwm stop` stops the service; `frostwm off` only hides snowfall, leaving the service running for quick toggles.
 
-To start automatically in future sessions, run:
+To start FrostWM automatically in future sessions, run:
 
 ```bash
 frostwm enable
 ```
 
-The CLI imports the current Niri/Wayland session variables into the systemd user manager before starting/restarting the service.
+The CLI imports the current Niri/Wayland session variables into the systemd user manager before starting or restarting the service.
 
 ## Waybar
 
-The installer copies the Waybar helper to `~/.config/waybar/scripts/frostwm`. Merge `waybar/config-snippet.jsonc` into your Waybar config and add `"custom/frostwm"` to the appropriate module list. Left click toggles; right click triggers a gust. If the service is stopped, clicking starts it.
+The installer copies the Waybar helper to `~/.config/waybar/scripts/frostwm`.
 
-## Logs and safe shutdown
+To enable it:
 
-```bash
-frostwm logs
-systemctl --user stop frostwm.service
-```
-
-The service receives SIGTERM; FrostWM handles it, closes its control socket, unmaps the overlay, and exits. systemd restarts it on unexpected crashes and records output in the journal. If anything goes wrong:
-
-```bash
-frostwm stop
-```
-
-Emergency fallback:
-
-```bash
-systemctl --user kill --signal=SIGKILL frostwm.service
-```
-
-Use SIGKILL only if normal stop fails; it skips the program's cleanup handler.
-
-## Known limitations
-
-- This is a prototype. The input passthrough mechanism was verified on the user's GTK3/Wayland/Niri system in a separate diagnostic program; the full v0.4 overlay still needs testing on that system.
-- Niri event payload geometry can vary by version. Window-edge snow and close bursts are best-effort and need confirmation on the target session.
-- The current overlay is a single-output prototype; multi-monitor-specific surfaces and per-monitor settings are not implemented.
-- Interactive mouse effects read the current pointer position without receiving pointer events, preserving click-through. Pointer coordinates may not map correctly on multi-monitor layouts.
+1. Merge `
