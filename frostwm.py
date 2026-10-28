@@ -243,7 +243,7 @@ class FrostWM(Gtk.Window):
             return
         self.windows[wid] = {
             **rect,
-            "depth": old.get("depth", 1.0),
+            "depth": old.get("depth", 1.5),
             "title": win.get("title", old.get("title", "")),
             "workspace_id": win.get("workspace_id", old.get("workspace_id")),
         }
@@ -303,7 +303,7 @@ class FrostWM(Gtk.Window):
                     continue
                 wid, layout = str(item[0]), item[1]
                 old_window = self.windows.get(wid, {})
-                if old_window and isinstance(layout, dict):
+                if isinstance(layout, dict):
                     self._remember_window(wid, {
                         "id": wid, "title": old_window.get("title", ""),
                         "workspace_id": old_window.get("workspace_id"),
@@ -477,7 +477,7 @@ class FrostWM(Gtk.Window):
             self.bursts = [b for b in self.bursts if b["age"] < 1.8 and b["n"] > 0]
             if self.cfg.get("window_ledges", True):
                 for win in self.windows.values():
-                    win["depth"] = min(float(self.cfg["ledge_target_depth"]), float(win.get("depth", .8)) + dt * .15)
+                    win["depth"] = min(float(self.cfg["ledge_target_depth"]), float(win.get("depth", 1.5)) + dt * .35)
         self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
