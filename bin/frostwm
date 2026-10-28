@@ -22,6 +22,14 @@ finally:
 PY
 }
 service_active() { systemctl --user is-active --quiet "$SERVICE"; }
+wait_control_ready() {
+  for _ in {1..50}; do
+    if service_active && send status >/dev/null 2>&1; then return 0; fi
+    sleep 0.1
+  done
+  echo "FrostWM service is running, but its control socket did not become ready. Check: frostwm logs 80" >&2
+  return 1
+}
 
 case "$cmd" in
   start)
@@ -31,15 +39,11 @@ case "$cmd" in
       echo "FrostWM is already running."
     else
       systemctl --user start "$SERVICE"
-      for _ in {1..30}; do
-        if service_active && [[ -S "$SOCK" ]]; then
-          echo "FrostWM started (Cozy Winter)."
-          exit 0
-        fi
-        sleep 0.1
-      done
-      echo "FrostWM service started, but its control socket did not appear. Check: journalctl --user -u frostwm -n 60" >&2
-      exit 1
+      if wait_control_ready; then
+        echo "FrostWM started (Cozy Winter)."
+      else
+        exit 1
+      fi
     fi
     ;;
   stop)
@@ -53,6 +57,7 @@ case "$cmd" in
   restart)
     systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR NIRI_SOCKET DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
     systemctl --user restart "$SERVICE"
+    wait_control_ready
     echo "FrostWM restarted."
     ;;
   update)
@@ -78,6 +83,7 @@ case "$cmd" in
     systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR NIRI_SOCKET DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
     if service_active; then
       systemctl --user restart "$SERVICE"
+      wait_control_ready
       echo "FrostWM updated and restarted."
     else
       echo "FrostWM updated. Start it with: frostwm start"
