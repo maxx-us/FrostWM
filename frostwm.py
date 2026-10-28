@@ -496,6 +496,7 @@ class FrostWM(Gtk.Window):
                 "ambient_effects": bool(self.cfg.get("mouse_effects", True)),
                 "ambient_wakes": len(self.ambient_wakes),
                 "surface_size": [self.width, self.height],
+                "tracked_windows": len(self.windows),
                 "particles": len(self.flakes),
                 "window_ledges": bool(self.cfg["window_ledges"] and os.environ.get("NIRI_SOCKET")),
             })
