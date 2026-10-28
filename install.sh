@@ -10,6 +10,13 @@ fi
 install -m 755 "$ROOT/bin/frostwm" "$HOME/.local/bin/frostwm"
 install -m 644 "$ROOT/systemd/frostwm.service" "$HOME/.config/systemd/user/frostwm.service"
 install -m 755 "$ROOT/waybar/frostwm" "$HOME/.config/waybar/scripts/frostwm"
+if [[ -d "$ROOT/gnome-extension" ]]; then
+  GNOME_EXT="$HOME/.local/share/gnome-shell/extensions/frostwm@maxx-us.github.io"
+  mkdir -p "$GNOME_EXT"
+  install -m 644 "$ROOT/gnome-extension/extension.js" "$GNOME_EXT/extension.js"
+  install -m 644 "$ROOT/gnome-extension/metadata.json" "$GNOME_EXT/metadata.json"
+  echo "Installed GNOME Shell extension files (enable with: gnome-extensions enable frostwm@maxx-us.github.io)."
+fi
 systemctl --user daemon-reload
 echo "Installed FrostWM 0.9."
 echo "Ensure ~/.local/bin is on PATH; in zsh add: export PATH=\"\$HOME/.local/bin:\$PATH\""
