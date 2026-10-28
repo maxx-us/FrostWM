@@ -87,14 +87,19 @@ def load_config():
     return cfg
 
 class Flake:
-    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "rotation", "alpha", "warm", "shape", "stretch", "landed_window")
+    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "rotation", "alpha", "warm", "shape", "stretch", "landed_window", "clump_id")
     def __init__(self, w, h, cfg, anywhere=False):
         self.x = random.uniform(0, max(1, w))
         self.y = random.uniform(0, max(1, h)) if anywhere else random.uniform(-h * .15, 0)
         self.r = random.uniform(cfg["flake_min_radius"], cfg["flake_max_radius"])
-        self.vy = random.uniform(cfg["min_speed"], cfg["max_speed"])
+        # Give a minority of flakes a noticeably faster fall, and make their
+        # speed less uniform so the snowfall feels gusty rather than synthetic.
+        speed_scale = random.uniform(1.15, 1.65) if random.random() < 0.28 else 1.0
+        self.vy = random.uniform(cfg["min_speed"], cfg["max_speed"]) * speed_scale
         self.vx = random.uniform(-8, 8)
         self.phase = random.random() * math.tau
+        # Correlated spawn positions/velocities make small natural-looking clumps.
+        self.clump_id = random.randrange(7) if random.random() < 0.62 else None
         self.rotation = random.random() * math.tau
         # A mixed population: specks, six-arm crystals, compact plates, and
         # wind-stretched flakes. Shape stays fixed for each particle's lifetime.
@@ -214,6 +219,17 @@ class FrostWM(Gtk.Window):
         while len(self.flakes) < count:
             self.flakes.append(Flake(self.width, self.height, self.cfg, anywhere=True))
         self.flakes = self.flakes[:count]
+        # Seed some flakes in nearby groups instead of distributing every
+        # particle independently. Keep the count unchanged for performance.
+        if count and len(self.flakes) == count:
+            leaders = [f for f in self.flakes if f.clump_id is not None]
+            for flake in self.flakes:
+                if flake.clump_id is not None and leaders:
+                    leader = leaders[flake.clump_id % len(leaders)]
+                    if leader is not flake and random.random() < 0.34:
+                        flake.x = (leader.x + random.uniform(-22, 22)) % max(1, self.width)
+                        flake.y = leader.y + random.uniform(-28, 28)
+                        flake.vy = max(flake.vy, leader.vy * random.uniform(0.88, 1.18))
 
     def _start_ipc(self):
         threading.Thread(target=self._ipc_worker, daemon=True, name="frostwm-niri-ipc").start()
@@ -332,7 +348,10 @@ class FrostWM(Gtk.Window):
             if not wid:
                 x += width + gap_x
                 continue
-            y = max(0.0, (self.height - height) / 2.0)
+            # In the simple tiled fallback, Niri's usable area is normally
+            # top-aligned beneath the panel. Centering by tile height placed
+            # ledges noticeably below the actual window tops.
+            y = max(0.0, min(36.0, (self.height - height) * 0.18))
             rects[wid] = {"x": x, "y": y, "width": width, "height": height}
             x += width + gap_x
         return rects
@@ -423,18 +442,22 @@ class FrostWM(Gtk.Window):
             )
             return GLib.SOURCE_REMOVE
 
-        # Niri calls this WindowLayoutsChanged (plural), with [id, layout] pairs.
+        # Niri versions differ in how WindowLayoutsChanged is serialized:
+        # some wrap the [id, layout] pairs in {"changes": [...]}, others send
+        # the pairs directly as the event payload. Accept both forms.
         if key == "windowlayoutschanged":
-            for item in data.get("changes", []):
-                if not isinstance(item, (list, tuple)) or len(item) != 2:
-                    continue
-                wid, layout = str(item[0]), item[1]
-                old_window = self.windows.get(wid, {})
-                if isinstance(layout, dict):
-                    self._remember_window(wid, {
-                        "id": wid, "title": old_window.get("title", ""),
-                        "workspace_id": old_window.get("workspace_id"),
-                    }, layout_override=layout)
+            changes = payload if isinstance(payload, list) else data.get("changes", [])
+            if isinstance(changes, list):
+                for item in changes:
+                    if not isinstance(item, (list, tuple)) or len(item) != 2:
+                        continue
+                    wid, layout = str(item[0]), item[1]
+                    old_window = self.windows.get(wid, {})
+                    if isinstance(layout, dict):
+                        self._remember_window(wid, {
+                            "id": wid, "title": old_window.get("title", ""),
+                            "workspace_id": old_window.get("workspace_id"),
+                        }, layout_override=layout)
             return GLib.SOURCE_REMOVE
 
         # Metadata updates may carry a full window object with geometry nested in layout.
