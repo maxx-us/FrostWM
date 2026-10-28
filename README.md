@@ -47,7 +47,7 @@ sudo pacman -S python python-gobject gtk3 python-cairo gtk-layer-shell
 
 ## Manual installation
 
-If you downloaded the source archive manually, extract it, open a terminal in the extracted `frostwm-0.4` directory, and run:
+If you downloaded the source archive manually, extract it, open a terminal in the extracted `FrostWM-main` directory, and run:
 
 ```bash
 ./install.sh
