@@ -128,6 +128,13 @@ case "$cmd" in
     [[ $# -eq 1 ]] || { echo "Usage: frostwm fps 10..120" >&2; exit 2; }
     send "fps $1"
     ;;
+  ledges)
+    [[ $# -eq 1 ]] || { echo "Usage: frostwm ledges on|off" >&2; exit 2; }
+    case "$1" in
+      on|off) send "ledges $1" ;;
+      *) echo "Usage: frostwm ledges on|off" >&2; exit 2 ;;
+    esac
+    ;;
   logs)
     journalctl --user -u "$SERVICE" -n "${1:-60}" --no-pager
     ;;
@@ -146,6 +153,7 @@ FrostWM controls (no terminal needs to remain open):
   frostwm intensity 0-100 Set snow density
   frostwm wind 0-100      Set wind strength
   frostwm fps 10-120      Set animation target FPS
+  frostwm ledges on|off   Toggle snow ledges on window edges
   frostwm enable          Start automatically at login
   frostwm disable-startup Disable automatic login start
   frostwm restart         Restart overlay
