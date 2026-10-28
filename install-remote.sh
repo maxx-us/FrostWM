@@ -42,7 +42,7 @@ tar -xzf "$tmpdir/frostwm.tar.gz" -C "$tmpdir" ||
 
 project_dir="$tmpdir/FrostWM-${BRANCH}"
 [[ -d "$project_dir" ]] || die "Expected source directory was not found in the archive."
-for required in install.sh frostwm.py config.example.json bin/frostwm systemd/frostwm.service waybar/frostwm; do
+for required in install.sh frostwm.py config.example.json bin/frostwm systemd/frostwm.service waybar/frostwm gnome-extension/extension.js gnome-extension/metadata.json; do
   [[ -f "$project_dir/$required" ]] || die "Repository is missing required file: $required"
 done
 
