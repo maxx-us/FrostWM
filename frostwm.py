@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FrostWM 0.4 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
+"""FrostWM 0.5 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
 import json
 import math
 import os
