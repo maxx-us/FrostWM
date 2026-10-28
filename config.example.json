@@ -3,7 +3,7 @@
   "style": "Cozy Winter",
   "intensity": 35,
   "wind_strength": 25,
-  "fps": 30,
+  "fps": 60,
   "max_particles": 220,
   "min_speed": 18.0,
   "max_speed": 72.0,
