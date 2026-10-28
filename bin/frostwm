@@ -103,6 +103,13 @@ case "$cmd" in
       send "$cmd"
     fi
     ;;
+  preset)
+    [[ $# -eq 1 ]] || { echo "Usage: frostwm preset gentle|cozy|blizzard" >&2; exit 2; }
+    case "$1" in
+      gentle|cozy|blizzard) send "preset $1" ;;
+      *) echo "Unknown preset: $1. Choose gentle, cozy, or blizzard." >&2; exit 2 ;;
+    esac
+    ;;
   intensity)
     [[ $# -eq 1 ]] || { echo "Usage: frostwm intensity 0..100" >&2; exit 2; }
     send "density $1"
@@ -127,6 +134,9 @@ FrostWM controls (no terminal needs to remain open):
   frostwm on | off        Enable/disable snowfall
   frostwm status          Show current settings/status
   frostwm gust            Trigger a wind gust
+  frostwm preset gentle   Quiet, slow, sparse snow
+  frostwm preset cozy     Balanced Cozy Winter preset
+  frostwm preset blizzard Heavy, fast snow and strong wind
   frostwm intensity 0-100 Set snow density
   frostwm wind 0-100      Set wind strength
   frostwm fps 10-120      Set animation target FPS
