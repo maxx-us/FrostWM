@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FrostWM 0.6 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
+"""FrostWM 0.7 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
 import json
 import math
 import os
@@ -405,6 +405,7 @@ class FrostWM(Gtk.Window):
                 "intensity": self.cfg["intensity"], "wind": self.cfg["wind_strength"],
                 "mouse_effects": self.cfg["mouse_effects"],
                 "mouse_seen": self.mouse_seen,
+                "mouse_position": [round(self.mouse_x, 1), round(self.mouse_y, 1)] if self.mouse_seen else None,
                 "surface_size": [self.width, self.height],
                 "particles": len(self.flakes),
                 "window_ledges": self.cfg["window_ledges"],
@@ -480,9 +481,10 @@ class FrostWM(Gtk.Window):
                     d2 = dx * dx + dy * dy
                     if 1 < d2 < 95 * 95:
                         d = math.sqrt(d2)
-                        force = (1 - d / 95) * 85 * dt
+                        # A clearer but still gentle cursor wake, visible at normal speed.
+                        force = (1 - d / 125) * 210 * dt
                         f.x += (dx / d) * force
-                        f.y += (dy / d) * force * .45
+                        f.y += (dy / d) * force * .60
                 if f.y > self.height + 5:
                     f.y = random.uniform(-30, -2)
                     f.x = random.uniform(0, self.width)
@@ -537,8 +539,8 @@ class FrostWM(Gtk.Window):
 
         # Soft cursor halo, drawn only; input remains entirely click-through.
         if self.mouse_seen and self.cfg.get("mouse_effects", True):
-            halo = cairo.RadialGradient(self.mouse_x, self.mouse_y, 2, self.mouse_x, self.mouse_y, 60)
-            halo.add_color_stop_rgba(0, 1.0, .86, .66, .055 if cozy else .025)
+            halo = cairo.RadialGradient(self.mouse_x, self.mouse_y, 2, self.mouse_x, self.mouse_y, 90)
+            halo.add_color_stop_rgba(0, 1.0, .86, .66, .12 if cozy else .06)
             halo.add_color_stop_rgba(1, 1.0, .86, .66, 0)
             cr.set_source(halo)
             cr.paint()
