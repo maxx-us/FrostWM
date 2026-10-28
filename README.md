@@ -11,7 +11,7 @@ FrostWM is a transparent, click-through snowfall overlay for GTK3 and Wayland co
 - Intensity: **35%** (about 77 particles when the maximum is 220)
 - Animation target: **60 FPS** by default; configurable from 10 to 120 FPS (actual rate depends on compositor, display refresh, and system load)
 - Wind: **25%**
-- Window-edge accumulation enabled, with a 4 px target and 8 px hard maximum
+- Window-edge accumulation enabled, with a 4 px target and 8 px hard maximum; settled flakes are capped at 25% of the active particle count (60% chance for each falling flake to settle)
 - Ambient mouse-like effects: localized snow swirls, gentle gusts, and soft warm glows, with no pointer tracking or input-device permissions required
 - Window-close snow bursts enabled
 - Click-through input handling using `Gdk.Window.set_pass_through(True)` and an empty Cairo input region, applied after realize/map
