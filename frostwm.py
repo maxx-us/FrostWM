@@ -87,7 +87,7 @@ def load_config():
     return cfg
 
 class Flake:
-    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "alpha", "warm")
+    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "rotation", "alpha", "warm")
     def __init__(self, w, h, cfg, anywhere=False):
         self.x = random.uniform(0, max(1, w))
         self.y = random.uniform(0, max(1, h)) if anywhere else random.uniform(-h * .15, 0)
@@ -95,6 +95,7 @@ class Flake:
         self.vy = random.uniform(cfg["min_speed"], cfg["max_speed"])
         self.vx = random.uniform(-8, 8)
         self.phase = random.random() * math.tau
+        self.rotation = random.random() * math.tau
         self.alpha = random.uniform(.35, 1.0)
         self.warm = random.random() < .10
 
@@ -625,18 +626,47 @@ class FrostWM(Gtk.Window):
                 cr.paint()
 
         for f in self.flakes:
+            # Tiny distant flakes remain soft specks; larger flakes are drawn as
+            # six-armed crystals instead of circles with a decorative streak.
+            alpha = self.cfg["opacity"] * f.alpha
             if cozy and f.warm:
-                cr.set_source_rgba(1.0, .88, .70, self.cfg["opacity"] * f.alpha)
+                cr.set_source_rgba(1.0, .88, .70, alpha)
             else:
-                cr.set_source_rgba(.98, .98, .94 if cozy else 1.0, self.cfg["opacity"] * f.alpha)
-            cr.arc(f.x, f.y, f.r, 0, math.tau)
+                cr.set_source_rgba(.98, .98, .94 if cozy else 1.0, alpha)
+
+            if f.r < 0.95:
+                cr.arc(f.x, f.y, f.r, 0, math.tau)
+                cr.fill()
+                continue
+
+            arm = max(2.2, f.r * 2.35)
+            branch = arm * 0.36
+            cr.save()
+            cr.translate(f.x, f.y)
+            cr.rotate(f.rotation + math.sin(f.phase) * 0.12)
+            cr.set_line_cap(cairo.LINE_CAP_ROUND)
+            cr.set_line_join(cairo.LINE_JOIN_ROUND)
+            cr.set_line_width(max(0.55, f.r * 0.24))
+
+            # Six delicate arms, with two short branches near each tip.
+            for arm_index in range(6):
+                angle = arm_index * math.tau / 6
+                ux, uy = math.cos(angle), math.sin(angle)
+                cr.move_to(-ux * arm * 0.18, -uy * arm * 0.18)
+                cr.line_to(ux * arm, uy * arm)
+                for direction in (-1, 1):
+                    bx, by = ux * arm * 0.58, uy * arm * 0.58
+                    branch_angle = angle + direction * math.pi * 0.72
+                    cr.move_to(bx, by)
+                    cr.line_to(bx + math.cos(branch_angle) * branch,
+                               by + math.sin(branch_angle) * branch)
+            cr.stroke()
+
+            # A small bright core gives the crystal a little depth.
+            cr.set_source_rgba(1.0, 1.0, 1.0, min(1.0, alpha * 1.15))
+            cr.arc(0, 0, max(0.45, f.r * 0.32), 0, math.tau)
             cr.fill()
-            if f.r > 1.8:
-                cr.set_source_rgba(1, 1, 1, .28)
-                cr.set_line_width(.6)
-                cr.move_to(f.x - f.r * 2, f.y)
-                cr.line_to(f.x + f.r * 2, f.y)
-                cr.stroke()
+            cr.restore()
 
         # Very soft ambient glows accompany temporary snow swirls.
         if self.cfg.get("mouse_effects", True):
