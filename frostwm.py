@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FrostWM 0.7 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
+"""FrostWM 0.8 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
 import json
 import math
 import os
@@ -105,8 +105,9 @@ class FrostWM(Gtk.Window):
         self._cmd_server = None
         self._socket_path = Path(self.cfg["socket"])
         self._stopping = False
-        self.mouse_x, self.mouse_y = -10000.0, -10000.0
-        self.mouse_seen = False
+        # Ambient snow wakes mimic pointer disturbance without global cursor access.
+        self.ambient_wakes = []
+        self.ambient_next = random.uniform(1.2, 2.8)
 
         self.connect("draw", self.on_draw)
         self.connect("realize", self.on_realize)
@@ -404,8 +405,9 @@ class FrostWM(Gtk.Window):
                 "enabled": self.enabled, "style": self.cfg["style"],
                 "intensity": self.cfg["intensity"], "wind": self.cfg["wind_strength"],
                 "mouse_effects": self.cfg["mouse_effects"],
-                "mouse_seen": self.mouse_seen,
-                "mouse_position": [round(self.mouse_x, 1), round(self.mouse_y, 1)] if self.mouse_seen else None,
+                "mouse_tracking": False,
+                "ambient_effects": bool(self.cfg.get("mouse_effects", True)),
+                "ambient_wakes": len(self.ambient_wakes),
                 "surface_size": [self.width, self.height],
                 "particles": len(self.flakes),
                 "window_ledges": self.cfg["window_ledges"],
@@ -426,21 +428,49 @@ class FrostWM(Gtk.Window):
         except Exception as exc:
             print(f"FrostWM: couldn't save config: {exc}", flush=True)
 
-    def _update_mouse_position(self):
+    def _update_ambient_effects(self, dt):
+        """Create brief, localized snow swirls without reading pointer/input devices."""
         if not self.cfg.get("mouse_effects", True):
-            self.mouse_seen = False
+            self.ambient_wakes.clear()
             return
-        try:
-            display = Gdk.Display.get_default()
-            seat = display.get_default_seat() if display else None
-            pointer = seat.get_pointer() if seat else None
-            if pointer:
-                screen, x, y = pointer.get_position()
-                # Single-output prototype: global coordinates can be negative on other monitors.
-                self.mouse_x, self.mouse_y = float(x), float(y)
-                self.mouse_seen = True
-        except Exception:
-            pass
+
+        self.ambient_next -= dt
+        if self.ambient_next <= 0:
+            if random.random() < 0.72:
+                x = random.uniform(self.width * 0.18, self.width * 0.82)
+                y = random.uniform(self.height * 0.18, self.height * 0.82)
+            else:
+                x = random.uniform(0, self.width)
+                y = random.uniform(0, self.height)
+            self.ambient_wakes.append({
+                "x": x, "y": y,
+                "radius": random.uniform(75, 145),
+                "age": 0.0,
+                "duration": random.uniform(1.8, 3.0),
+                "strength": random.uniform(22, 48),
+                "spin": random.choice((-1, 1)),
+            })
+            self.ambient_next = random.uniform(2.8, 5.8) * (1.15 - self.cfg["wind_strength"] / 250)
+            if random.random() < 0.22 + self.cfg["wind_strength"] / 250:
+                self.gust += random.choice((-1, 1)) * random.uniform(12, 38)
+
+        for wake in self.ambient_wakes:
+            wake["age"] += dt
+        self.ambient_wakes = [w for w in self.ambient_wakes if w["age"] < w["duration"]]
+
+    def _apply_ambient_wakes(self, flake, dt):
+        for wake in self.ambient_wakes:
+            dx, dy = flake.x - wake["x"], flake.y - wake["y"]
+            distance = math.hypot(dx, dy)
+            radius = wake["radius"]
+            if distance < 1 or distance >= radius:
+                continue
+            life = max(0.0, 1.0 - wake["age"] / wake["duration"])
+            proximity = 1.0 - distance / radius
+            force = wake["strength"] * proximity * life * dt
+            # A soft outward nudge plus a tangential swirl, like a pointer wake.
+            flake.x += (dx / distance) * force + (-dy / distance) * force * 0.72 * wake["spin"]
+            flake.y += (dy / distance) * force + (dx / distance) * force * 0.48 * wake["spin"]
 
     def tick(self):
         if self._stopping:
@@ -466,8 +496,8 @@ class FrostWM(Gtk.Window):
             # Wait for gtk-layer-shell to allocate the fullscreen surface.
             self.queue_draw()
             return GLib.SOURCE_CONTINUE
-        self._update_mouse_position()
         if self.enabled:
+            self._update_ambient_effects(dt)
             self._fill_particles()
             self.gust *= max(0, 1 - dt * .55)
             for f in self.flakes:
@@ -475,16 +505,9 @@ class FrostWM(Gtk.Window):
                 wind_noise = math.sin(f.phase) * 5
                 f.x += (f.vx + self.wind + self.gust + wind_noise) * dt
                 f.y += f.vy * dt
-                # Interactive flakes bend gently around the cursor without taking input.
-                if self.mouse_seen and self.cfg.get("mouse_effects", True):
-                    dx, dy = f.x - self.mouse_x, f.y - self.mouse_y
-                    d2 = dx * dx + dy * dy
-                    if 1 < d2 < 95 * 95:
-                        d = math.sqrt(d2)
-                        # A clearer but still gentle cursor wake, visible at normal speed.
-                        force = (1 - d / 125) * 210 * dt
-                        f.x += (dx / d) * force
-                        f.y += (dy / d) * force * .60
+                # Ambient swirls create mouse-like snow motion without pointer access.
+                if self.cfg.get("mouse_effects", True):
+                    self._apply_ambient_wakes(f, dt)
                 if f.y > self.height + 5:
                     f.y = random.uniform(-30, -2)
                     f.x = random.uniform(0, self.width)
@@ -537,13 +560,16 @@ class FrostWM(Gtk.Window):
                 cr.line_to(f.x + f.r * 2, f.y)
                 cr.stroke()
 
-        # Soft cursor halo, drawn only; input remains entirely click-through.
-        if self.mouse_seen and self.cfg.get("mouse_effects", True):
-            halo = cairo.RadialGradient(self.mouse_x, self.mouse_y, 2, self.mouse_x, self.mouse_y, 90)
-            halo.add_color_stop_rgba(0, 1.0, .86, .66, .12 if cozy else .06)
-            halo.add_color_stop_rgba(1, 1.0, .86, .66, 0)
-            cr.set_source(halo)
-            cr.paint()
+        # Very soft ambient glows accompany temporary snow swirls.
+        if self.cfg.get("mouse_effects", True):
+            for wake in self.ambient_wakes:
+                life = max(0.0, 1.0 - wake["age"] / wake["duration"])
+                radius = wake["radius"] * (0.55 + 0.45 * (1.0 - life))
+                halo = cairo.RadialGradient(wake["x"], wake["y"], 2, wake["x"], wake["y"], radius)
+                halo.add_color_stop_rgba(0, 1.0, .86, .66, (.055 if cozy else .025) * life)
+                halo.add_color_stop_rgba(1, 1.0, .86, .66, 0)
+                cr.set_source(halo)
+                cr.paint()
 
         for b in self.bursts:
             t = b["age"]
