@@ -277,6 +277,64 @@ class FrostWM(Gtk.Window):
                 return {}
         return {}
 
+    def _fallback_tiled_rects(self, windows):
+        """Estimate tiled rectangles only when a simple layout fully fits onscreen.
+
+        Niri 26.04 reports null tile_pos_in_workspace_view for tiled windows.
+        This fallback deliberately avoids scrolling and stacked/tabbed columns,
+        where IPC does not expose enough information to calculate exact geometry.
+        """
+        if self.width <= 1 or self.height <= 1 or not windows:
+            return {}
+
+        by_column = {}
+        for win in windows:
+            layout = win.get("layout", {})
+            if not isinstance(layout, dict):
+                continue
+            pos = layout.get("pos_in_scrolling_layout")
+            size = layout.get("tile_size")
+            if (not isinstance(pos, (list, tuple)) or len(pos) != 2
+                    or not isinstance(size, (list, tuple)) or len(size) != 2):
+                continue
+            try:
+                col, row = int(pos[0]), int(pos[1])
+                width, height = float(size[0]), float(size[1])
+            except (TypeError, ValueError):
+                continue
+            if col < 1 or row < 1 or width <= 0 or height <= 0:
+                continue
+            by_column.setdefault(col, []).append((row, str(win.get("id", "")), width, height))
+
+        if not by_column:
+            return {}
+        # A stacked column can contain hidden tabs whose actual visible tile is
+        # not exposed by this IPC version. Never place snow on guessed tab edges.
+        if any(len(items) != 1 for items in by_column.values()):
+            return {}
+        columns = sorted(by_column)
+        if columns != list(range(1, len(columns) + 1)):
+            return {}
+        widths = [by_column[col][0][2] for col in columns]
+        total_width = sum(widths)
+        if total_width > self.width:
+            return {}  # scrolling offset is unavailable in this Niri version
+
+        # Niri uses consistent outer/inter-column gaps. Share only the remaining
+        # space evenly; this is a fallback for compact, fully visible layouts.
+        gap_x = (self.width - total_width) / (len(widths) + 1)
+        rects = {}
+        x = gap_x
+        for col, width in zip(columns, widths):
+            row, wid, _, height = by_column[col][0]
+            if not wid:
+                x += width + gap_x
+                continue
+            y = max(0.0, (self.height - height) / 2.0)
+            rects[wid] = {"x": x, "y": y, "width": width, "height": height}
+            x += width + gap_x
+        return rects
+
     def _remember_window(self, wid, win, layout_override=None):
         if not wid or not isinstance(win, dict):
             return
@@ -320,6 +378,17 @@ class FrostWM(Gtk.Window):
             incoming = data.get("windows", [])
             fresh = {}
             if isinstance(incoming, list):
+                # Niri 26.04 leaves tile_pos_in_workspace_view null for tiled
+                # windows. When every column fits on screen, derive a conservative
+                # fallback from tile sizes. Do not guess for scrolled layouts or
+                # columns containing stacked/tabbed tiles.
+                focused = next((w for w in incoming
+                                if isinstance(w, dict) and w.get("is_focused")), None)
+                active_ws = focused.get("workspace_id") if focused else None
+                visible = [w for w in incoming
+                           if isinstance(w, dict)
+                           and (active_ws is None or w.get("workspace_id") == active_ws)]
+                fallback = self._fallback_tiled_rects(visible)
                 for win in incoming:
                     if not isinstance(win, dict):
                         continue
@@ -327,7 +396,7 @@ class FrostWM(Gtk.Window):
                     if not wid:
                         continue
                     previous = self.windows.get(wid, {})
-                    rect = self._window_rect(win)
+                    rect = self._window_rect(win) or fallback.get(wid, {})
                     if rect:
                         fresh[wid] = {
                             **rect,
