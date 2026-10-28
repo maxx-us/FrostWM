@@ -22,7 +22,7 @@ RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 DEFAULTS = {
     "enabled": True,
     "style": "Cozy Winter",
-    "preset": "cozy",
+    "preset": "custom",
     "intensity": 50,
     "wind_strength": 25,
     "fps": 60,
