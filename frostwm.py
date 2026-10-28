@@ -22,6 +22,7 @@ RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 DEFAULTS = {
     "enabled": True,
     "style": "Cozy Winter",
+    "preset": "cozy",
     "intensity": 50,
     "wind_strength": 25,
     "fps": 60,
@@ -37,6 +38,31 @@ DEFAULTS = {
     "ledge_max_depth": 8,
     "mouse_effects": True,
     "socket": str(RUNTIME_DIR / "frostwm.sock"),
+}
+
+# Presets are starting points: all existing individual controls remain available.
+PRESETS = {
+    "gentle": {
+        "style": "Gentle Snow", "intensity": 22, "wind_strength": 8,
+        "fps": 45, "max_particles": 220, "min_speed": 10.0,
+        "max_speed": 34.0, "flake_min_radius": 0.6,
+        "flake_max_radius": 1.8, "opacity": 0.62,
+        "close_burst": False, "window_ledges": False, "mouse_effects": False,
+    },
+    "cozy": {
+        "style": "Cozy Winter", "intensity": 35, "wind_strength": 25,
+        "fps": 60, "max_particles": 260, "min_speed": 18.0,
+        "max_speed": 72.0, "flake_min_radius": 0.7,
+        "flake_max_radius": 2.5, "opacity": 0.82,
+        "close_burst": True, "window_ledges": True, "mouse_effects": True,
+    },
+    "blizzard": {
+        "style": "Blizzard", "intensity": 90, "wind_strength": 78,
+        "fps": 60, "max_particles": 420, "min_speed": 38.0,
+        "max_speed": 125.0, "flake_min_radius": 0.9,
+        "flake_max_radius": 3.0, "opacity": 0.94,
+        "close_burst": True, "window_ledges": True, "mouse_effects": True,
+    },
 }
 
 def load_config():
@@ -383,9 +409,31 @@ class FrostWM(Gtk.Window):
         if cmd == "gust":
             self.gust = random.choice([-1, 1]) * random.uniform(35, 90)
             return "ok"
+        if cmd.startswith("preset "):
+            parts = cmd.split()
+            if len(parts) != 2 or parts[1].lower() not in PRESETS:
+                return "error: choose gentle, cozy, or blizzard"
+            name = parts[1].lower()
+            self.cfg.update(PRESETS[name])
+            self.cfg["preset"] = name
+            self.cfg["particles"] = round(
+                self.cfg["max_particles"] * self.cfg["intensity"] / 100
+            )
+            self.enabled = bool(self.cfg.get("enabled", True))
+            self.wind = self.cfg["wind_strength"] * .40
+            self.gust = 0.0
+            self._fill_particles(reseed=True)
+            if self.tick_source:
+                GLib.source_remove(self.tick_source)
+            self.tick_source = GLib.timeout_add(
+                max(1, int(1000 / self.cfg["fps"])), self.tick
+            )
+            self.save_config()
+            return f"{name}: intensity={self.cfg['intensity']} wind={self.cfg['wind_strength']} fps={self.cfg['fps']}"
         if cmd.startswith("density "):
             try:
                 self.cfg["intensity"] = max(0, min(100, int(cmd.split()[1])))
+                self.cfg["preset"] = "custom"
                 self.cfg["particles"] = round(self.cfg["max_particles"] * self.cfg["intensity"] / 100)
                 self._fill_particles()
                 self.save_config()
@@ -395,6 +443,7 @@ class FrostWM(Gtk.Window):
         if cmd.startswith("wind "):
             try:
                 self.cfg["wind_strength"] = max(0, min(100, int(cmd.split()[1])))
+                self.cfg["preset"] = "custom"
                 self.wind = self.cfg["wind_strength"] * .40
                 self.save_config()
                 return str(self.cfg["wind_strength"])
@@ -404,6 +453,7 @@ class FrostWM(Gtk.Window):
             try:
                 fps = max(10, min(120, int(cmd.split()[1])))
                 self.cfg["fps"] = fps
+                self.cfg["preset"] = "custom"
                 self.save_config()
                 if self.tick_source:
                     GLib.source_remove(self.tick_source)
@@ -414,6 +464,7 @@ class FrostWM(Gtk.Window):
         if cmd == "status":
             return json.dumps({
                 "enabled": self.enabled, "style": self.cfg["style"],
+                "preset": self.cfg.get("preset", "custom"),
                 "fps": self.cfg["fps"],
                 "desktop": os.environ.get("XDG_CURRENT_DESKTOP") or os.environ.get("DESKTOP_SESSION") or "unknown",
                 "window_tracking": bool(os.environ.get("NIRI_SOCKET")),
