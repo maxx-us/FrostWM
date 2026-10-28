@@ -1,4 +1,4 @@
-# FrostWM 0.4 — Cozy Winter
+# FrostWM 0.5 — Cozy Winter
 
 FrostWM is a transparent, click-through snowfall overlay for GTK3, gtk-layer-shell, and Niri. Bring a cozy winter atmosphere to your desktop with animated snow, interactive mouse effects, and snow accumulation along window edges.
 
@@ -27,6 +27,15 @@ This downloads and runs the remote installer, which fetches the latest source fr
 **Requirements:** `curl` or `wget`, `tar`, Python 3, GTK3, PyGObject, PyCairo, and gtk-layer-shell. The remote installer does not use `sudo`; install missing system dependencies separately.
 
 > **Security note:** This downloads and executes the installer from the repository's `main` branch. Review [`install-remote.sh`](https://github.com/maxx-us/FrostWM/blob/main/install-remote.sh) and [`install.sh`](https://github.com/maxx-us/FrostWM/blob/main/install.sh) before running it if you want to inspect what will be executed.
+
+## Fixes in 0.5
+
+- Read Niri’s actual visual tile coordinates and sizes instead of assuming x/y/width/height fields.
+- Track the initial `WindowsChanged` snapshot and plural `WindowLayoutsChanged` updates so visible window ledges can be drawn.
+- Detect closed windows from Niri’s replacement window snapshots.
+- Spawn the falling-snow burst from the closing window’s top edge; if no valid position is known, skip the burst instead of incorrectly using the desktop centre.
+
+After updating, rerun the one-command installer above, then run `frostwm restart` to restart the running overlay.
 
 ## Dependencies
 
