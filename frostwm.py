@@ -464,6 +464,29 @@ class FrostWM(Gtk.Window):
                             "id": wid, "title": old_window.get("title", ""),
                             "workspace_id": old_window.get("workspace_id"),
                         }, layout_override=layout)
+                        # If Niri supplies null visual coordinates (common for
+                        # tiled windows), refresh the snapshot and recalculate
+                        # the conservative tiled fallback instead of leaving
+                        # the ledge stranded at its previous screen position.
+                        if not self._window_rect({"layout": layout}):
+                            for snapshot_win in self._niri_snapshot:
+                                if isinstance(snapshot_win, dict) and str(snapshot_win.get("id", "")) == wid:
+                                    snapshot_win["layout"] = layout
+                                    break
+                            focused = next((w for w in self._niri_snapshot
+                                            if isinstance(w, dict) and w.get("is_focused")), None)
+                            active_ws = focused.get("workspace_id") if focused else None
+                            visible = [w for w in self._niri_snapshot
+                                       if isinstance(w, dict)
+                                       and (active_ws is None or w.get("workspace_id") == active_ws)]
+                            fallback = self._fallback_tiled_rects(visible)
+                            for snapshot_win in visible:
+                                sid = str(snapshot_win.get("id", ""))
+                                rect = self._window_rect(snapshot_win) or fallback.get(sid)
+                                if sid and rect and sid in self.windows:
+                                    depth = self.windows[sid].get("depth", 1.0)
+                                    self.windows[sid].update(rect)
+                                    self.windows[sid]["depth"] = depth
             return GLib.SOURCE_REMOVE
 
         # Metadata updates may carry a full window object with geometry nested in layout.
