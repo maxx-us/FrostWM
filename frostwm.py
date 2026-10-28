@@ -45,14 +45,14 @@ PRESETS = {
     "gentle": {
         "style": "Gentle Snow", "intensity": 22, "wind_strength": 8,
         "fps": 45, "max_particles": 280, "min_speed": 10.0,
-        "max_speed": 34.0, "flake_min_radius": 0.6,
-        "flake_max_radius": 2.5, "opacity": 0.78,
+        "max_speed": 34.0, "flake_min_radius": 0.9,
+        "flake_max_radius": 2.8, "opacity": 0.82,
         "close_burst": False, "window_ledges": False, "mouse_effects": False,
     },
     "cozy": {
         "style": "Cozy Winter", "intensity": 35, "wind_strength": 25,
         "fps": 60, "max_particles": 360, "min_speed": 18.0,
-        "max_speed": 72.0, "flake_min_radius": 0.7,
+        "max_speed": 72.0, "flake_min_radius": 1.1,
         "flake_max_radius": 3.4, "opacity": 0.90,
         "close_burst": True, "window_ledges": True, "mouse_effects": True,
     },
