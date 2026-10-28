@@ -775,20 +775,27 @@ class FrostWM(Gtk.Window):
                 # this, the overlay draws snow over glass and it looks like
                 # particles simply fall through the window.
                 if self.cfg.get("window_ledges", True):
-                    for wid, win in self.windows.items():
-                        try:
-                            wx, wy = float(win["x"]), float(win["y"])
-                            ww = float(win["width"])
-                            if (ww > 20 and wx <= f.x <= wx + ww
-                                    and previous_y <= wy <= f.y
-                                    and -2 <= wy < self.height):
-                                f.y = wy - max(1.0, f.r * 0.7)
-                                f.landed_window = wid
-                                win["depth"] = min(float(self.cfg["ledge_max_depth"]),
-                                                   float(win.get("depth", 1.0)) + 0.25)
-                                break
-                        except (KeyError, TypeError, ValueError):
-                            continue
+                    # Keep window ledges from trapping too much of the particle
+                    # population: only a fraction of flakes may settle, and the
+                    # total number of settled flakes is capped.
+                    landed_limit = max(0, int(self.cfg.get("landed_flake_limit", 80)))
+                    landing_chance = max(0, min(100, int(self.cfg.get("ledge_landing_chance", 60)))) / 100.0
+                    landed_count = sum(1 for flake in self.flakes if flake.landed_window is not None)
+                    if landed_count < landed_limit and random.random() < landing_chance:
+                        for wid, win in self.windows.items():
+                            try:
+                                wx, wy = float(win["x"]), float(win["y"])
+                                ww = float(win["width"])
+                                if (ww > 20 and wx <= f.x <= wx + ww
+                                        and previous_y <= wy <= f.y
+                                        and -2 <= wy < self.height):
+                                    f.y = wy - max(1.0, f.r * 0.7)
+                                    f.landed_window = wid
+                                    win["depth"] = min(float(self.cfg["ledge_max_depth"]),
+                                                       float(win.get("depth", 1.0)) + 0.25)
+                                    break
+                            except (KeyError, TypeError, ValueError):
+                                continue
                 # Ambient swirls create mouse-like snow motion without pointer access.
                 if self.cfg.get("mouse_effects", True):
                     self._apply_ambient_wakes(f, dt)
