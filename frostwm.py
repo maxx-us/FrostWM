@@ -753,11 +753,13 @@ class FrostWM(Gtk.Window):
             self._update_ambient_effects(dt)
             self._fill_particles()
             self.gust *= max(0, 1 - dt * .55)
+            landed_count = sum(1 for flake in self.flakes if flake.landed_window is not None)
             for f in self.flakes:
                 if f.landed_window is not None:
                     landed = self.windows.get(str(f.landed_window))
                     if landed is None:
                         f.landed_window = None
+                        landed_count = max(0, landed_count - 1)
                         f.vy = random.uniform(self.cfg["min_speed"], self.cfg["max_speed"])
                         f.y = random.uniform(-24, -3)
                     else:
@@ -780,7 +782,6 @@ class FrostWM(Gtk.Window):
                     # total number of settled flakes is capped.
                     landed_limit = max(0, int(self.cfg.get("landed_flake_limit", 80)))
                     landing_chance = max(0, min(100, int(self.cfg.get("ledge_landing_chance", 60)))) / 100.0
-                    landed_count = sum(1 for flake in self.flakes if flake.landed_window is not None)
                     if landed_count < landed_limit and random.random() < landing_chance:
                         for wid, win in self.windows.items():
                             try:
@@ -791,6 +792,7 @@ class FrostWM(Gtk.Window):
                                         and -2 <= wy < self.height):
                                     f.y = wy - max(1.0, f.r * 0.7)
                                     f.landed_window = wid
+                                    landed_count += 1
                                     win["depth"] = min(float(self.cfg["ledge_max_depth"]),
                                                        float(win.get("depth", 1.0)) + 0.25)
                                     break
