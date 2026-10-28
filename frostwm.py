@@ -149,7 +149,10 @@ class FrostWM(Gtk.Window):
         self.connect("map-event", self.on_map)
         self._fill_particles()
         self._start_ipc()
-        # Tick at 2x the requested presentation rate. GTK coalesces queued draws\n        # to the compositor frame clock; this avoids adding a full timer interval\n        # after an expensive frame and accidentally halving the effective FPS.\n        self.tick_source = GLib.timeout_add(max(1, round(500 / self.cfg["fps"])), self.tick)
+        # Tick at 2x the requested presentation rate. GTK coalesces queued draws
+        # to the compositor frame clock; this avoids adding a full timer interval
+        # after an expensive frame and accidentally halving the effective FPS.
+        self.tick_source = GLib.timeout_add(max(1, round(500 / self.cfg["fps"])), self.tick)
         GLib.timeout_add(180, self.poll_commands)
         signal.signal(signal.SIGTERM, self._signal_stop)
         signal.signal(signal.SIGINT, self._signal_stop)
@@ -407,7 +410,9 @@ class FrostWM(Gtk.Window):
                 pass
         self.cfg["fps"] = fps
         self.last = time.monotonic()
-        # Run updates at 2x target rate; queued GTK draws are coalesced by the\n        # compositor, while the shorter interval compensates for render time.\n        self.tick_source = GLib.timeout_add(max(1, round(500 / fps)), self.tick)
+        # Run updates at 2x target rate; queued GTK draws are coalesced by the
+        # compositor, while the shorter interval compensates for render time.
+        self.tick_source = GLib.timeout_add(max(1, round(500 / fps)), self.tick)
         self.queue_draw()
         return fps
 
