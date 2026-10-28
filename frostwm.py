@@ -199,13 +199,66 @@ class FrostWM(Gtk.Window):
 
     @staticmethod
     def _window_rect(win):
+        """Return visible tile geometry from Niri's Window or WindowLayout JSON."""
         if not isinstance(win, dict):
             return {}
-        for key in ("layout", "rect", "geometry", "window_rect"):
-            value = win.get(key)
-            if isinstance(value, dict) and any(k in value for k in ("x", "y", "width", "height")):
-                return value
-        return win if any(k in win for k in ("x", "y", "width", "height")) else {}
+        for source in (win, win.get("layout"), win.get("window_layout")):
+            if not isinstance(source, dict):
+                continue
+            if all(k in source for k in ("x", "y", "width", "height")):
+                try:
+                    return {k: float(source[k]) for k in ("x", "y", "width", "height")}
+                except (TypeError, ValueError):
+                    pass
+
+        layout = win.get("layout", win)
+        if not isinstance(layout, dict):
+            return {}
+        pos = layout.get("tile_pos_in_workspace_view")
+        size = layout.get("tile_size")
+        # Niri's visual coordinates are these pairs. pos_in_scrolling_layout is
+        # only a column/row index and must never be treated as screen coordinates.
+        if (isinstance(pos, (list, tuple)) and len(pos) == 2
+                and isinstance(size, (list, tuple)) and len(size) == 2
+                and pos[0] is not None and pos[1] is not None):
+            try:
+                return {
+                    "x": float(pos[0]), "y": float(pos[1]),
+                    "width": float(size[0]), "height": float(size[1]),
+                }
+            except (TypeError, ValueError):
+                return {}
+        return {}
+
+    def _remember_window(self, wid, win, layout_override=None):
+        if not wid or not isinstance(win, dict):
+            return
+        wid = str(wid)
+        old = self.windows.get(wid, {})
+        candidate = dict(win)
+        if layout_override is not None:
+            candidate["layout"] = layout_override
+        rect = self._window_rect(candidate)
+        if not rect:
+            return
+        self.windows[wid] = {
+            **rect,
+            "depth": old.get("depth", 1.0),
+            "title": win.get("title", old.get("title", "")),
+            "workspace_id": win.get("workspace_id", old.get("workspace_id")),
+        }
+
+    def _close_burst(self, rect):
+        if not self.cfg.get("close_burst", True):
+            return
+        # Start at the TOP edge of the closing window, not its centre.
+        try:
+            x = float(rect["x"]) + float(rect["width"]) / 2
+            y = float(rect["y"])
+        except (KeyError, TypeError, ValueError):
+            # No valid position: skip the burst instead of spawning at desktop centre.
+            return
+        self.bursts.append({"x": x, "y": y, "n": 22, "age": 0.0})
 
     def handle_niri_event(self, event):
         if not isinstance(event, dict):
@@ -213,30 +266,63 @@ class FrostWM(Gtk.Window):
         name, payload = next(iter(event.items()), ("", {}))
         key = str(name).lower().replace("_", "")
         data = payload if isinstance(payload, dict) else {}
-        win = data.get("window", data)
-        wid = str(win.get("id", data.get("id", ""))) if isinstance(win, dict) else ""
-        rect = self._window_rect(win)
+
+        # The event stream starts with WindowsChanged containing a full snapshot.
+        # Later snapshots also let us reliably detect which windows have closed.
+        if key == "windowschanged":
+            incoming = data.get("windows", [])
+            fresh = {}
+            if isinstance(incoming, list):
+                for win in incoming:
+                    if not isinstance(win, dict):
+                        continue
+                    wid = str(win.get("id", ""))
+                    if not wid:
+                        continue
+                    previous = self.windows.get(wid, {})
+                    rect = self._window_rect(win)
+                    if rect:
+                        fresh[wid] = {
+                            **rect,
+                            "depth": previous.get("depth", 1.0),
+                            "title": win.get("title", previous.get("title", "")),
+                            "workspace_id": win.get("workspace_id", previous.get("workspace_id")),
+                        }
+                    elif previous:
+                        fresh[wid] = previous
+            for wid, old_window in list(self.windows.items()):
+                if wid not in fresh:
+                    self._close_burst(old_window)
+            self.windows = fresh
+            return GLib.SOURCE_REMOVE
+
+        # Niri calls this WindowLayoutsChanged (plural), with [id, layout] pairs.
+        if key == "windowlayoutschanged":
+            for item in data.get("changes", []):
+                if not isinstance(item, (list, tuple)) or len(item) != 2:
+                    continue
+                wid, layout = str(item[0]), item[1]
+                old_window = self.windows.get(wid, {})
+                if old_window and isinstance(layout, dict):
+                    self._remember_window(wid, {
+                        "id": wid, "title": old_window.get("title", ""),
+                        "workspace_id": old_window.get("workspace_id"),
+                    }, layout_override=layout)
+            return GLib.SOURCE_REMOVE
+
+        # Metadata updates may carry a full window object with geometry nested in layout.
+        if "windowopenedorchanged" in key or "windowopened" in key or "windowchanged" in key:
+            win = data.get("window", data)
+            if isinstance(win, dict):
+                self._remember_window(str(win.get("id", data.get("id", ""))), win)
+            return GLib.SOURCE_REMOVE
+
+        # Compatibility with variants that explicitly emit a close event.
         if "windowclosed" in key or "windowremoved" in key:
-            old = self.windows.pop(wid, None)
-            if self.cfg.get("close_burst", True):
-                rect = rect or (old or {})
-                try:
-                    x = float(rect.get("x", self.width / 2))
-                    y = float(rect.get("y", self.height / 2))
-                    width = float(rect.get("width", 120))
-                except Exception:
-                    x, y, width = self.width / 2, self.height / 2, 120
-                self.bursts.append({"x": x + width / 2, "y": y, "n": 22, "age": 0.0})
-        elif "windowopened" in key or "windowlayoutchanged" in key or "windowchanged" in key:
-            if wid and rect:
-                old = self.windows.get(wid, {})
-                self.windows[wid] = {
-                    "x": rect.get("x", old.get("x", 0)),
-                    "y": rect.get("y", old.get("y", 0)),
-                    "width": rect.get("width", old.get("width", 0)),
-                    "height": rect.get("height", old.get("height", 0)),
-                    "depth": old.get("depth", 0.8),
-                }
+            win = data.get("window", data)
+            wid = str(win.get("id", data.get("id", ""))) if isinstance(win, dict) else ""
+            old_window = self.windows.pop(wid, None)
+            self._close_burst(self._window_rect(win) or old_window or {})
         return GLib.SOURCE_REMOVE
 
     def poll_commands(self):
