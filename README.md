@@ -54,7 +54,7 @@ Switch presets at runtime; changes are saved to your personal config:
 - `frostwm preset cozy` — balanced snowfall with warm highlights and desktop effects
 - `frostwm preset blizzard` — dense, faster flakes, stronger wind, and higher opacity
 
-You can still fine-tune individual settings afterward with commands such as `frostwm intensity 50`, `frostwm wind 25`, and `frostwm fps 60`. Changing one of those marks the selected preset as `custom` in status.
+You can still fine-tune individual settings afterward with commands such as `frostwm intensity 50`, `frostwm wind 25`, and `frostwm fps 30`. FPS is the animation update target (10–120), not a guaranteed compositor/display FPS cap. The command applies the new timer immediately and confirms the selected target. Changing intensity, wind, or FPS marks the selected preset as `custom` in status.
 
 ## Changes in 0.9
 
