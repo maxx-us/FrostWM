@@ -6,6 +6,7 @@ FrostWM is a transparent, click-through snowfall overlay for GTK3 and Wayland co
 
 - Snowfall enabled
 - Style: **Cozy Winter** — cream-white flakes, a few warm flakes, and subtle amber edge glow
+- Three live presets: **Gentle Snow**, **Cozy Winter**, and **Blizzard**; each adjusts density, speed, wind, particle size, opacity, FPS, and optional effects together
 - Intensity: **35%** (about 77 particles when the maximum is 220)
 - Animation target: **60 FPS** by default; configurable from 10 to 120 FPS (actual rate depends on compositor, display refresh, and system load)
 - Wind: **25%**
@@ -44,6 +45,16 @@ gnome-extensions enable frostwm@maxx-us.github.io
 If it does not appear immediately, log out and back in, then enable it. This initial GNOME backend provides the snowfall overlay; it does not yet share all Python backend controls or Niri-only effects.
 
 **X11 desktops are not supported yet.** They need a separate X11 overlay backend.
+
+## Presets
+
+Switch presets at runtime; changes are saved to your personal config:
+
+- `frostwm preset gentle` — light, slow snow with reduced ambient and window effects
+- `frostwm preset cozy` — balanced snowfall with warm highlights and desktop effects
+- `frostwm preset blizzard` — dense, faster flakes, stronger wind, and higher opacity
+
+You can still fine-tune individual settings afterward with commands such as `frostwm intensity 50`, `frostwm wind 25`, and `frostwm fps 60`. Changing one of those marks the selected preset as `custom` in status.
 
 ## Changes in 0.9
 
@@ -117,6 +128,9 @@ frostwm on              # Enable snowfall
 frostwm off             # Disable snowfall
 frostwm status          # Print JSON status
 frostwm gust            # Trigger a gust
+frostwm preset gentle   # Quiet, slower, sparse snowfall
+frostwm preset cozy     # Balanced Cozy Winter look
+frostwm preset blizzard # Dense, fast snowfall and strong wind
 frostwm intensity 0     # Turn snowfall density to zero
 frostwm intensity 50    # 50% density
 frostwm intensity 100   # Full density
