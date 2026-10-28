@@ -87,7 +87,7 @@ def load_config():
     return cfg
 
 class Flake:
-    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "rotation", "alpha", "warm")
+    __slots__ = ("x", "y", "r", "vy", "vx", "phase", "rotation", "alpha", "warm", "shape", "stretch")
     def __init__(self, w, h, cfg, anywhere=False):
         self.x = random.uniform(0, max(1, w))
         self.y = random.uniform(0, max(1, h)) if anywhere else random.uniform(-h * .15, 0)
@@ -96,6 +96,13 @@ class Flake:
         self.vx = random.uniform(-8, 8)
         self.phase = random.random() * math.tau
         self.rotation = random.random() * math.tau
+        # A mixed population: specks, six-arm crystals, compact plates, and
+        # wind-stretched flakes. Shape stays fixed for each particle's lifetime.
+        self.shape = random.choices(
+            ("speck", "crystal", "plate", "needle", "cluster"),
+            weights=(18, 36, 20, 12, 14), k=1
+        )[0]
+        self.stretch = random.uniform(1.35, 2.2)
         self.alpha = random.uniform(.35, 1.0)
         self.warm = random.random() < .10
 
@@ -626,45 +633,80 @@ class FrostWM(Gtk.Window):
                 cr.paint()
 
         for f in self.flakes:
-            # Tiny distant flakes remain soft specks; larger flakes are drawn as
-            # six-armed crystals instead of circles with a decorative streak.
             alpha = self.cfg["opacity"] * f.alpha
             if cozy and f.warm:
                 cr.set_source_rgba(1.0, .88, .70, alpha)
             else:
                 cr.set_source_rgba(.98, .98, .94 if cozy else 1.0, alpha)
 
-            if f.r < 0.95:
-                cr.arc(f.x, f.y, f.r, 0, math.tau)
+            # Shape variety is intentional: real snow crystals form in many
+            # patterns, and distant particles remain simple soft specks.
+            if f.shape == "speck" or f.r < 0.8:
+                cr.arc(f.x, f.y, max(.45, f.r), 0, math.tau)
                 cr.fill()
                 continue
 
-            arm = max(2.2, f.r * 2.35)
-            branch = arm * 0.36
             cr.save()
             cr.translate(f.x, f.y)
             cr.rotate(f.rotation + math.sin(f.phase) * 0.12)
             cr.set_line_cap(cairo.LINE_CAP_ROUND)
             cr.set_line_join(cairo.LINE_JOIN_ROUND)
-            cr.set_line_width(max(0.55, f.r * 0.24))
+            cr.set_line_width(max(.5, f.r * .22))
 
-            # Six delicate arms, with two short branches near each tip.
-            for arm_index in range(6):
-                angle = arm_index * math.tau / 6
-                ux, uy = math.cos(angle), math.sin(angle)
-                cr.move_to(-ux * arm * 0.18, -uy * arm * 0.18)
-                cr.line_to(ux * arm, uy * arm)
-                for direction in (-1, 1):
-                    bx, by = ux * arm * 0.58, uy * arm * 0.58
-                    branch_angle = angle + direction * math.pi * 0.72
-                    cr.move_to(bx, by)
-                    cr.line_to(bx + math.cos(branch_angle) * branch,
-                               by + math.sin(branch_angle) * branch)
-            cr.stroke()
+            if f.shape == "crystal":
+                arm = max(2.3, f.r * 2.45)
+                branch = arm * .34
+                for arm_index in range(6):
+                    angle = arm_index * math.tau / 6
+                    ux, uy = math.cos(angle), math.sin(angle)
+                    cr.move_to(-ux * arm * .15, -uy * arm * .15)
+                    cr.line_to(ux * arm, uy * arm)
+                    for direction in (-1, 1):
+                        bx, by = ux * arm * .57, uy * arm * .57
+                        ba = angle + direction * math.pi * .72
+                        cr.move_to(bx, by)
+                        cr.line_to(bx + math.cos(ba) * branch,
+                                   by + math.sin(ba) * branch)
+                cr.stroke()
+            elif f.shape == "plate":
+                # Flat, angular plate with six sides and a faint inner facet.
+                radius = max(1.5, f.r * 1.9)
+                cr.move_to(radius, 0)
+                for i in range(1, 6):
+                    a = i * math.tau / 6
+                    cr.line_to(math.cos(a) * radius, math.sin(a) * radius)
+                cr.close_path()
+                cr.stroke()
+                cr.move_to(radius * .48, 0)
+                for i in range(1, 6):
+                    a = i * math.tau / 6
+                    cr.line_to(math.cos(a) * radius * .48, math.sin(a) * radius * .48)
+                cr.close_path()
+                cr.stroke()
+            elif f.shape == "needle":
+                # Long, slender ice crystal, with a tiny crossbar.
+                length = max(3.0, f.r * 4.2)
+                cr.move_to(-length, 0)
+                cr.line_to(length, 0)
+                cr.move_to(-length * .25, -f.r * .65)
+                cr.line_to(-length * .25, f.r * .65)
+                cr.move_to(length * .3, -f.r * .65)
+                cr.line_to(length * .3, f.r * .65)
+                cr.stroke()
+            else:  # cluster: three intersecting crystalline arms
+                length = max(2.2, f.r * 2.15)
+                for arm_index in range(3):
+                    angle = arm_index * math.pi / 3
+                    ux, uy = math.cos(angle), math.sin(angle)
+                    cr.move_to(-ux * length, -uy * length)
+                    cr.line_to(ux * length, uy * length)
+                cr.stroke()
+                cr.arc(0, 0, max(.45, f.r * .3), 0, math.tau)
+                cr.fill()
 
-            # A small bright core gives the crystal a little depth.
-            cr.set_source_rgba(1.0, 1.0, 1.0, min(1.0, alpha * 1.15))
-            cr.arc(0, 0, max(0.45, f.r * 0.32), 0, math.tau)
+            # A small core catches the light without making every flake a dot.
+            cr.set_source_rgba(1.0, 1.0, 1.0, min(1.0, alpha * .92))
+            cr.arc(0, 0, max(.35, f.r * .20), 0, math.tau)
             cr.fill()
             cr.restore()
 
