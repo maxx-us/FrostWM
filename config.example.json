@@ -1,10 +1,11 @@
 {
   "enabled": true,
   "style": "Cozy Winter",
+  "preset": "cozy",
   "intensity": 35,
   "wind_strength": 25,
   "fps": 60,
-  "max_particles": 220,
+  "max_particles": 260,
   "min_speed": 18.0,
   "max_speed": 72.0,
   "flake_min_radius": 0.7,
