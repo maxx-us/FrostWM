@@ -26,7 +26,7 @@ This downloads and runs the remote installer, which fetches the latest source fr
 
 **Requirements:** `curl` or `wget`, `tar`, Python 3, GTK3, PyGObject, PyCairo, and gtk-layer-shell. The remote installer does not use `sudo`; install missing system dependencies separately.
 
-> **Repository setup:** Commit `install-remote.sh` to the root of the `main` branch before sharing the one-command installation link. Review the script before running it if you want to inspect what it does.
+> **Security note:** This downloads and executes the installer from the repository's `main` branch. Review [`install-remote.sh`](https://github.com/maxx-us/FrostWM/blob/main/install-remote.sh) and [`install.sh`](https://github.com/maxx-us/FrostWM/blob/main/install.sh) before running it if you want to inspect what will be executed.
 
 ## Dependencies
 
