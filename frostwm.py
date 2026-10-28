@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FrostWM 0.5 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
+"""FrostWM 0.6 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
 import json
 import math
 import os
@@ -161,8 +161,16 @@ class FrostWM(Gtk.Window):
         GLib.idle_add(self._set_passthrough)
         return False
 
-    def _fill_particles(self):
+    def _fill_particles(self, reseed=False):
         count = self.cfg["particles"] if self.enabled else 0
+        if reseed:
+            # GTK can briefly report a 1x1 allocation on startup. Rebuild all
+            # particles after the real overlay dimensions are known.
+            self.flakes = [
+                Flake(self.width, self.height, self.cfg, anywhere=True)
+                for _ in range(count)
+            ]
+            return
         while len(self.flakes) < count:
             self.flakes.append(Flake(self.width, self.height, self.cfg, anywhere=True))
         self.flakes = self.flakes[:count]
@@ -438,14 +446,22 @@ class FrostWM(Gtk.Window):
         self.last = now
         alloc = self.get_allocation()
         w, h = max(1, alloc.width), max(1, alloc.height)
-        if (w, h) != (self.width, self.height):
+        if w > 1 and h > 1 and (w, h) != (self.width, self.height):
             oldw, oldh = self.width, self.height
             self.width, self.height = w, h
             if oldw > 1 and oldh > 1:
+                sx, sy = w / oldw, h / oldh
                 for f in self.flakes:
-                    f.x *= w / oldw
-                    f.y *= h / oldh
-            self._fill_particles()
+                    f.x *= sx
+                    f.y *= sy
+            else:
+                # Previously flakes were initialized against a 1x1 surface,
+                # which piled them all into the upper-left corner.
+                self._fill_particles(reseed=True)
+        elif w <= 1 or h <= 1:
+            # Wait for gtk-layer-shell to allocate the fullscreen surface.
+            self.queue_draw()
+            return GLib.SOURCE_CONTINUE
         self._update_mouse_position()
         if self.enabled:
             self._fill_particles()
