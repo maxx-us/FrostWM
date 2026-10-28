@@ -36,6 +36,8 @@ DEFAULTS = {
     "window_ledges": True,
     "ledge_target_depth": 4,
     "ledge_max_depth": 8,
+    "landed_flake_limit_percent": 25,
+    "ledge_landing_chance": 60,
     "mouse_effects": True,
     "socket": str(RUNTIME_DIR / "frostwm.sock"),
 }
@@ -83,6 +85,8 @@ def load_config():
     cfg["fps"] = max(10, min(120, int(cfg.get("fps", 60))))
     cfg["ledge_target_depth"] = max(1, min(8, int(cfg.get("ledge_target_depth", 4))))
     cfg["ledge_max_depth"] = max(cfg["ledge_target_depth"], min(8, int(cfg.get("ledge_max_depth", 8))))
+    cfg["landed_flake_limit_percent"] = max(0, min(100, int(cfg.get("landed_flake_limit_percent", 25))))
+    cfg["ledge_landing_chance"] = max(0, min(100, int(cfg.get("ledge_landing_chance", 60))))
     cfg["socket"] = str(RUNTIME_DIR / "frostwm.sock")
     return cfg
 
@@ -824,7 +828,9 @@ class FrostWM(Gtk.Window):
                     # Keep window ledges from trapping too much of the particle
                     # population: only a fraction of flakes may settle, and the
                     # total number of settled flakes is capped.
-                    landed_limit = max(0, int(self.cfg.get("landed_flake_limit", 80)))
+                    landed_limit = round(len(self.flakes) * max(0, min(100, int(
+                        self.cfg.get("landed_flake_limit_percent", 25)
+                    ))) / 100)
                     landing_chance = max(0, min(100, int(self.cfg.get("ledge_landing_chance", 60)))) / 100.0
                     if landed_count < landed_limit and random.random() < landing_chance:
                         for wid, win in self.windows.items():
