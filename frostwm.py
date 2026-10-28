@@ -518,6 +518,19 @@ class FrostWM(Gtk.Window):
         if cmd == "gust":
             self.gust = random.choice([-1, 1]) * random.uniform(35, 90)
             return "ok"
+        if cmd.startswith("ledges "):
+            parts = cmd.split()
+            if len(parts) != 2 or parts[1].lower() not in ("on", "off"):
+                return "error: usage is ledges on|off"
+            enabled = parts[1].lower() == "on"
+            self.cfg["window_ledges"] = enabled
+            self.cfg["preset"] = "custom"
+            if not enabled:
+                for flake in self.flakes:
+                    flake.landed_window = None
+            self.save_config()
+            self.queue_draw()
+            return "on" if enabled else "off"
         if cmd.startswith("preset "):
             parts = cmd.split()
             if len(parts) != 2 or parts[1].lower() not in PRESETS:
