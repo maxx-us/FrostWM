@@ -55,6 +55,34 @@ case "$cmd" in
     systemctl --user restart "$SERVICE"
     echo "FrostWM restarted."
     ;;
+  update)
+    # Fetch the official remote installer, install latest files, then restart the service.
+    if command -v curl >/dev/null 2>&1; then
+      downloader="curl"
+    elif command -v wget >/dev/null 2>&1; then
+      downloader="wget"
+    else
+      echo "FrostWM update needs curl or wget." >&2
+      exit 1
+    fi
+    tmp="$(mktemp "${TMPDIR:-/tmp}/frostwm-update.XXXXXXXX")"
+    trap 'rm -f -- "$tmp"' EXIT
+    url="https://raw.githubusercontent.com/maxx-us/FrostWM/main/install-remote.sh"
+    echo "Downloading the latest FrostWM installer..."
+    if [[ "$downloader" == "curl" ]]; then
+      curl --fail --location --silent --show-error "$url" -o "$tmp"
+    else
+      wget --https-only -q "$url" -O "$tmp"
+    fi
+    bash "$tmp"
+    systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR NIRI_SOCKET DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
+    if service_active; then
+      systemctl --user restart "$SERVICE"
+      echo "FrostWM updated and restarted."
+    else
+      echo "FrostWM updated. Start it with: frostwm start"
+    fi
+    ;;
   enable)
     systemctl --user enable "$SERVICE"
     echo "FrostWM will start at login."
