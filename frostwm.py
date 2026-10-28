@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FrostWM 0.8 — cozy winter snow overlay for GTK3 + gtk-layer-shell + Niri."""
+"""FrostWM 0.9 — cozy winter snow overlay for GTK3 + gtk-layer-shell Wayland compositors."""
 import json
 import math
 import os
@@ -24,7 +24,7 @@ DEFAULTS = {
     "style": "Cozy Winter",
     "intensity": 50,
     "wind_strength": 25,
-    "fps": 30,
+    "fps": 60,
     "max_particles": 260,
     "min_speed": 18.0,
     "max_speed": 72.0,
@@ -54,7 +54,7 @@ def load_config():
     cfg["wind_strength"] = max(0, min(100, int(cfg.get("wind_strength", 25))))
     cfg["max_particles"] = max(1, min(1000, int(cfg.get("max_particles", 260))))
     cfg["particles"] = round(cfg["max_particles"] * cfg["intensity"] / 100)
-    cfg["fps"] = max(10, min(60, int(cfg.get("fps", 30))))
+    cfg["fps"] = max(10, min(120, int(cfg.get("fps", 60))))
     cfg["ledge_target_depth"] = max(1, min(8, int(cfg.get("ledge_target_depth", 4))))
     cfg["ledge_max_depth"] = max(cfg["ledge_target_depth"], min(8, int(cfg.get("ledge_max_depth", 8))))
     cfg["socket"] = str(RUNTIME_DIR / "frostwm.sock")
@@ -114,7 +114,7 @@ class FrostWM(Gtk.Window):
         self.connect("map-event", self.on_map)
         self._fill_particles()
         self._start_ipc()
-        GLib.timeout_add(max(10, int(1000 / self.cfg["fps"])), self.tick)
+        self.tick_source = GLib.timeout_add(max(1, int(1000 / self.cfg["fps"])), self.tick)
         GLib.timeout_add(180, self.poll_commands)
         signal.signal(signal.SIGTERM, self._signal_stop)
         signal.signal(signal.SIGINT, self._signal_stop)
@@ -400,9 +400,23 @@ class FrostWM(Gtk.Window):
                 return str(self.cfg["wind_strength"])
             except (ValueError, IndexError):
                 return "error"
+        if cmd.startswith("fps "):
+            try:
+                fps = max(10, min(120, int(cmd.split()[1])))
+                self.cfg["fps"] = fps
+                self.save_config()
+                if self.tick_source:
+                    GLib.source_remove(self.tick_source)
+                self.tick_source = GLib.timeout_add(max(1, int(1000 / fps)), self.tick)
+                return str(fps)
+            except (ValueError, IndexError):
+                return "error"
         if cmd == "status":
             return json.dumps({
                 "enabled": self.enabled, "style": self.cfg["style"],
+                "fps": self.cfg["fps"],
+                "desktop": os.environ.get("XDG_CURRENT_DESKTOP") or os.environ.get("DESKTOP_SESSION") or "unknown",
+                "window_tracking": bool(os.environ.get("NIRI_SOCKET")),
                 "intensity": self.cfg["intensity"], "wind": self.cfg["wind_strength"],
                 "mouse_effects": self.cfg["mouse_effects"],
                 "mouse_tracking": False,
@@ -410,7 +424,7 @@ class FrostWM(Gtk.Window):
                 "ambient_wakes": len(self.ambient_wakes),
                 "surface_size": [self.width, self.height],
                 "particles": len(self.flakes),
-                "window_ledges": self.cfg["window_ledges"],
+                "window_ledges": bool(self.cfg["window_ledges"] and os.environ.get("NIRI_SOCKET")),
             })
         if cmd == "clear":
             self.windows.clear()
