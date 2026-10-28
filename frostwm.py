@@ -387,6 +387,21 @@ class FrostWM(Gtk.Window):
             print(f"FrostWM: control socket: {exc}", flush=True)
         return GLib.SOURCE_CONTINUE
 
+    def _set_fps(self, fps):
+        """Apply a new GTK animation tick interval immediately."""
+        fps = max(10, min(120, int(fps)))
+        old_source = getattr(self, "tick_source", None)
+        if old_source:
+            try:
+                GLib.source_remove(old_source)
+            except GLib.Error:
+                pass
+        self.cfg["fps"] = fps
+        self.last = time.monotonic()
+        self.tick_source = GLib.timeout_add(max(1, round(1000 / fps)), self.tick)
+        self.queue_draw()
+        return fps
+
     def handle_command(self, cmd):
         if cmd == "toggle":
             self.enabled = not self.enabled
@@ -423,13 +438,9 @@ class FrostWM(Gtk.Window):
             self.wind = self.cfg["wind_strength"] * .40
             self.gust = 0.0
             self._fill_particles(reseed=True)
-            if self.tick_source:
-                GLib.source_remove(self.tick_source)
-            self.tick_source = GLib.timeout_add(
-                max(1, int(1000 / self.cfg["fps"])), self.tick
-            )
+            self._set_fps(self.cfg["fps"])
             self.save_config()
-            return f"{name}: intensity={self.cfg['intensity']} wind={self.cfg['wind_strength']} fps={self.cfg['fps']}"
+            return f"{name}: intensity={self.cfg['intensity']} wind={self.cfg['wind_strength']} fps={self.cfg['fps']} (target FPS)";
         if cmd.startswith("density "):
             try:
                 self.cfg["intensity"] = max(0, min(100, int(cmd.split()[1])))
@@ -450,17 +461,19 @@ class FrostWM(Gtk.Window):
             except (ValueError, IndexError):
                 return "error"
         if cmd.startswith("fps "):
+            parts = cmd.split()
             try:
-                fps = max(10, min(120, int(cmd.split()[1])))
-                self.cfg["fps"] = fps
+                if len(parts) != 2:
+                    return "error: usage is fps 10..120"
+                requested = int(parts[1])
+                if not 10 <= requested <= 120:
+                    return "error: FPS must be between 10 and 120"
+                fps = self._set_fps(requested)
                 self.cfg["preset"] = "custom"
                 self.save_config()
-                if self.tick_source:
-                    GLib.source_remove(self.tick_source)
-                self.tick_source = GLib.timeout_add(max(1, int(1000 / fps)), self.tick)
-                return str(fps)
-            except (ValueError, IndexError):
-                return "error"
+                return f"target FPS set to {fps}"
+            except ValueError:
+                return "error: FPS must be an integer between 10 and 120"
         if cmd == "status":
             return json.dumps({
                 "enabled": self.enabled, "style": self.cfg["style"],
