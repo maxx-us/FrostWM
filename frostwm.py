@@ -404,6 +404,9 @@ class FrostWM(Gtk.Window):
                 "enabled": self.enabled, "style": self.cfg["style"],
                 "intensity": self.cfg["intensity"], "wind": self.cfg["wind_strength"],
                 "mouse_effects": self.cfg["mouse_effects"],
+                "mouse_seen": self.mouse_seen,
+                "surface_size": [self.width, self.height],
+                "particles": len(self.flakes),
                 "window_ledges": self.cfg["window_ledges"],
             })
         if cmd == "clear":
