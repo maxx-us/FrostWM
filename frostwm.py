@@ -215,21 +215,27 @@ class FrostWM(Gtk.Window):
                 Flake(self.width, self.height, self.cfg, anywhere=True)
                 for _ in range(count)
             ]
-            return
-        while len(self.flakes) < count:
-            self.flakes.append(Flake(self.width, self.height, self.cfg, anywhere=True))
-        self.flakes = self.flakes[:count]
-        # Seed some flakes in nearby groups instead of distributing every
-        # particle independently. Keep the count unchanged for performance.
-        if count and len(self.flakes) == count:
+            # Create a few local clusters once per reseed, not on every frame.
             leaders = [f for f in self.flakes if f.clump_id is not None]
             for flake in self.flakes:
-                if flake.clump_id is not None and leaders:
+                if flake.clump_id is not None and leaders and random.random() < 0.34:
                     leader = leaders[flake.clump_id % len(leaders)]
-                    if leader is not flake and random.random() < 0.34:
+                    if leader is not flake:
                         flake.x = (leader.x + random.uniform(-22, 22)) % max(1, self.width)
                         flake.y = leader.y + random.uniform(-28, 28)
                         flake.vy = max(flake.vy, leader.vy * random.uniform(0.88, 1.18))
+            return
+        while len(self.flakes) < count:
+            flake = Flake(self.width, self.height, self.cfg, anywhere=True)
+            # Occasionally spawn a new flake near an existing one to form a
+            # small clump. This happens only on particle creation.
+            if self.flakes and flake.clump_id is not None and random.random() < 0.34:
+                leader = random.choice(self.flakes)
+                flake.x = (leader.x + random.uniform(-22, 22)) % max(1, self.width)
+                flake.y = leader.y + random.uniform(-28, 28)
+                flake.vy = max(flake.vy, leader.vy * random.uniform(0.88, 1.18))
+            self.flakes.append(flake)
+        self.flakes = self.flakes[:count]
 
     def _start_ipc(self):
         threading.Thread(target=self._ipc_worker, daemon=True, name="frostwm-niri-ipc").start()
