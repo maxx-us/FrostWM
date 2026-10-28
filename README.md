@@ -1,12 +1,12 @@
-# FrostWM 0.8 — Cozy Winter
+# FrostWM 0.9 — Cozy Winter
 
-FrostWM is a transparent, click-through snowfall overlay for GTK3, gtk-layer-shell, and Niri. Bring a cozy winter atmosphere to your desktop with animated snow, ambient mouse-like snow swirls, and snow accumulation along window edges.
+FrostWM is a transparent, click-through snowfall overlay for GTK3 and Wayland compositors that support GTK Layer Shell. Bring a cozy winter atmosphere to your desktop with animated snow, ambient mouse-like snow swirls, and snow accumulation along window edges.
 
 ## ✨ Features and defaults
 
 - Snowfall enabled
 - Style: **Cozy Winter** — cream-white flakes, a few warm flakes, and subtle amber edge glow
-- Intensity: **35%** (about 77 particles when the maximum is 220)
+- Intensity: **35%** (about 77 particles when the maximum is 220)\n- Animation target: **60 FPS** by default; configurable from 10 to 120 FPS (actual rate depends on compositor, display refresh, and system load)
 - Wind: **25%**
 - Window-edge accumulation enabled, with a 4 px target and 8 px hard maximum
 - Ambient mouse-like effects: localized snow swirls, gentle gusts, and soft warm glows, with no pointer tracking or input-device permissions required
@@ -27,6 +27,17 @@ This downloads and runs the remote installer, which fetches the latest source fr
 **Requirements:** `curl` or `wget`, `tar`, Python 3, GTK3, PyGObject, PyCairo, and gtk-layer-shell. The remote installer does not use `sudo`; install missing system dependencies separately.
 
 > **Security note:** This downloads and executes the installer from the repository's `main` branch. Review [`install-remote.sh`](https://github.com/maxx-us/FrostWM/blob/main/install-remote.sh) and [`install.sh`](https://github.com/maxx-us/FrostWM/blob/main/install.sh) before running it if you want to inspect what will be executed.
+
+## Desktop support
+
+FrostWM uses GTK Layer Shell for a transparent, click-through fullscreen overlay. This works on **KDE Plasma Wayland**, **Niri**, and other compatible Wayland compositors such as **Hyprland, Sway, COSMIC, and Wayfire**. The snow overlay itself is compositor-independent; window-edge accumulation and close bursts currently rely on Niri's IPC and therefore remain Niri-only.
+
+**Not supported by this backend:** GNOME on Wayland and X11 desktops, because they do not provide the required GTK Layer Shell protocol. FrostWM detects the current desktop for diagnostics, but that detection does not add support for an incompatible compositor.
+
+## Changes in 0.9
+
+- Raise the default animation target from 30 to 60 FPS, with a live `frostwm fps 10..120` setting.
+- Add desktop/backend diagnostics and clarify which effects are Niri-specific versus portable across compatible Wayland compositors.
 
 ## Changes in 0.8
 
@@ -98,7 +109,7 @@ frostwm gust            # Trigger a gust
 frostwm intensity 0     # Turn snowfall density to zero
 frostwm intensity 50    # 50% density
 frostwm intensity 100   # Full density
-frostwm wind 25         # Wind strength, 0..100
+frostwm wind 25         # Wind strength, 0..100\nfrostwm fps 60          # Animation target FPS, 10..120
 frostwm enable          # Start service automatically at login
 frostwm disable-startup # Disable automatic login start
 frostwm restart         # Restart service
