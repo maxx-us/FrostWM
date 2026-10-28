@@ -149,7 +149,7 @@ class FrostWM(Gtk.Window):
         self.connect("map-event", self.on_map)
         self._fill_particles()
         self._start_ipc()
-        self.tick_source = GLib.timeout_add(max(1, int(1000 / self.cfg["fps"])), self.tick)
+        # Tick at 2x the requested presentation rate. GTK coalesces queued draws\n        # to the compositor frame clock; this avoids adding a full timer interval\n        # after an expensive frame and accidentally halving the effective FPS.\n        self.tick_source = GLib.timeout_add(max(1, round(500 / self.cfg["fps"])), self.tick)
         GLib.timeout_add(180, self.poll_commands)
         signal.signal(signal.SIGTERM, self._signal_stop)
         signal.signal(signal.SIGINT, self._signal_stop)
@@ -407,7 +407,7 @@ class FrostWM(Gtk.Window):
                 pass
         self.cfg["fps"] = fps
         self.last = time.monotonic()
-        self.tick_source = GLib.timeout_add(max(1, round(1000 / fps)), self.tick)
+        # Run updates at 2x target rate; queued GTK draws are coalesced by the\n        # compositor, while the shorter interval compensates for render time.\n        self.tick_source = GLib.timeout_add(max(1, round(500 / fps)), self.tick)
         self.queue_draw()
         return fps
 
@@ -769,7 +769,7 @@ class FrostWM(Gtk.Window):
                 try:
                     x, y, width = float(win["x"]), float(win["y"]), float(win["width"])
                     depth = max(1.0, min(float(self.cfg["ledge_max_depth"]), float(win.get("depth", 1))))
-                    if width > 20 and -8 < y < self.height:
+                    if width > 20 and -max(48, depth * 6) < y < self.height:
                         # Draw a clear, high-contrast snow cap along each tracked top edge.
                         cr.set_source_rgba(.98, .99, 1.0, .98)
                         cr.set_line_width(max(3.0, depth + 1.5))
