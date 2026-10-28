@@ -44,7 +44,7 @@ DEFAULTS = {
 PRESETS = {
     "gentle": {
         "style": "Gentle Snow", "intensity": 22, "wind_strength": 8,
-        "fps": 45, "max_particles": 220, "min_speed": 10.0,
+        "fps": 60, "max_particles": 220, "min_speed": 10.0,
         "max_speed": 34.0, "flake_min_radius": 0.9,
         "flake_max_radius": 2.8, "opacity": 0.82,
         "close_burst": False, "window_ledges": False, "mouse_effects": False,
