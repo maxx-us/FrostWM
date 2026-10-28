@@ -228,6 +228,7 @@ class FrostWM(Gtk.Window):
                     ["niri", "msg", "--json", "event-stream"],
                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
                 )
+                print("FrostWM: connected to Niri event stream", flush=True)
                 assert proc.stdout is not None
                 for line in proc.stdout:
                     if self._stopping:
@@ -412,6 +413,11 @@ class FrostWM(Gtk.Window):
                 if wid not in fresh:
                     self._close_burst(old_window)
             self.windows = fresh
+            print(
+                f"FrostWM: WindowsChanged received={len(incoming) if isinstance(incoming, list) else 'invalid'} "
+                f"tracked={len(fresh)} overlay={self.width}x{self.height}",
+                flush=True,
+            )
             return GLib.SOURCE_REMOVE
 
         # Niri calls this WindowLayoutsChanged (plural), with [id, layout] pairs.
