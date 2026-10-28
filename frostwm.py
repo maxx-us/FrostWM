@@ -375,7 +375,9 @@ class FrostWM(Gtk.Window):
         # The event stream starts with WindowsChanged containing a full snapshot.
         # Later snapshots also let us reliably detect which windows have closed.
         if key == "windowschanged":
-            incoming = data.get("windows", [])
+            # Niri serializes WindowsChanged as a JSON array, not always as
+            # an object containing a "windows" field.
+            incoming = payload if isinstance(payload, list) else data.get("windows", [])
             fresh = {}
             if isinstance(incoming, list):
                 # Niri 26.04 leaves tile_pos_in_workspace_view null for tiled
