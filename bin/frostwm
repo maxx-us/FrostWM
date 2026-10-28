@@ -128,7 +128,8 @@ FrostWM controls (no terminal needs to remain open):
   frostwm status          Show current settings/status
   frostwm gust            Trigger a wind gust
   frostwm intensity 0-100 Set snow density
-  frostwm wind 0-100      Set wind strength\n  frostwm fps 10-120      Set animation target FPS
+  frostwm wind 0-100      Set wind strength
+  frostwm fps 10-120      Set animation target FPS
   frostwm enable          Start automatically at login
   frostwm disable-startup Disable automatic login start
   frostwm restart         Restart overlay
