@@ -1,4 +1,4 @@
-# FrostWM 0.6 — Cozy Winter
+# FrostWM 0.7 — Cozy Winter
 
 FrostWM is a transparent, click-through snowfall overlay for GTK3, gtk-layer-shell, and Niri. Bring a cozy winter atmosphere to your desktop with animated snow, interactive mouse effects, and snow accumulation along window edges.
 
@@ -28,6 +28,12 @@ This downloads and runs the remote installer, which fetches the latest source fr
 
 > **Security note:** This downloads and executes the installer from the repository's `main` branch. Review [`install-remote.sh`](https://github.com/maxx-us/FrostWM/blob/main/install-remote.sh) and [`install.sh`](https://github.com/maxx-us/FrostWM/blob/main/install.sh) before running it if you want to inspect what will be executed.
 
+## Fixes in 0.7
+
+- Add `frostwm update` to install the latest main-branch version and restart the service automatically.
+- Add pointer coordinates to `frostwm status` for debugging mouse tracking.
+- Increase visibility of the cursor halo and snowflake wake.
+
 ## Fixes in 0.6
 
 - Fix the startup particle cluster caused by creating flakes while the overlay is still 1×1.
@@ -41,7 +47,7 @@ This downloads and runs the remote installer, which fetches the latest source fr
 - Detect closed windows from Niri’s replacement window snapshots.
 - Spawn the falling-snow burst from the closing window’s top edge; if no valid position is known, skip the burst instead of incorrectly using the desktop centre.
 
-After updating, rerun the one-command installer above, then run `frostwm restart` to restart the running overlay. Existing personal config files are preserved; if you want the new lighter default, run `frostwm intensity 35`.
+After the first installation, update in one short command: `frostwm update`. It downloads the latest installer, preserves your personal config, and restarts the service. Existing personal config files are preserved; if you want the new lighter default, run `frostwm intensity 35`.
 
 ## Dependencies
 
@@ -90,6 +96,7 @@ frostwm wind 25         # Wind strength, 0..100
 frostwm enable          # Start service automatically at login
 frostwm disable-startup # Disable automatic login start
 frostwm restart         # Restart service
+frostwm update          # Install latest version and restart
 frostwm logs            # Show recent service logs
 ```
 
