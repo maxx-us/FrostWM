@@ -136,6 +136,7 @@ class FrostWM(Gtk.Window):
         self.gust = 0.0
         self.enabled = bool(self.cfg["enabled"])
         self.windows = {}
+        self._niri_snapshot = []
         self.bursts = []
         self._cmd_server = None
         self._socket_path = Path(self.cfg["socket"])
@@ -379,6 +380,8 @@ class FrostWM(Gtk.Window):
             # Niri serializes WindowsChanged as a JSON array, not always as
             # an object containing a "windows" field.
             incoming = payload if isinstance(payload, list) else data.get("windows", [])
+            if isinstance(incoming, list):
+                self._niri_snapshot = incoming
             fresh = {}
             if isinstance(incoming, list):
                 # Niri 26.04 leaves tile_pos_in_workspace_view null for tiled
@@ -662,6 +665,11 @@ class FrostWM(Gtk.Window):
                 # Previously flakes were initialized against a 1x1 surface,
                 # which piled them all into the upper-left corner.
                 self._fill_particles(reseed=True)
+            # The initial Niri snapshot often arrives before GTK allocates the
+            # fullscreen layer surface. Retry its geometry once real dimensions
+            # are available; Niri may not emit another WindowsChanged event.
+            if self._niri_snapshot and not self.windows:
+                self.handle_niri_event({"WindowsChanged": {"windows": self._niri_snapshot}})
         elif w <= 1 or h <= 1:
             # Wait for gtk-layer-shell to allocate the fullscreen surface.
             self.queue_draw()
