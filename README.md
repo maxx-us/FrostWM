@@ -1,6 +1,6 @@
-# FrostWM 0.7 — Cozy Winter
+# FrostWM 0.8 — Cozy Winter
 
-FrostWM is a transparent, click-through snowfall overlay for GTK3, gtk-layer-shell, and Niri. Bring a cozy winter atmosphere to your desktop with animated snow, interactive mouse effects, and snow accumulation along window edges.
+FrostWM is a transparent, click-through snowfall overlay for GTK3, gtk-layer-shell, and Niri. Bring a cozy winter atmosphere to your desktop with animated snow, ambient mouse-like snow swirls, and snow accumulation along window edges.
 
 ## ✨ Features and defaults
 
@@ -9,7 +9,7 @@ FrostWM is a transparent, click-through snowfall overlay for GTK3, gtk-layer-she
 - Intensity: **35%** (about 77 particles when the maximum is 220)
 - Wind: **25%**
 - Window-edge accumulation enabled, with a 4 px target and 8 px hard maximum
-- Interactive mouse effects: flakes gently bend around the pointer, with a subtle warm halo
+- Ambient mouse-like effects: localized snow swirls, gentle gusts, and soft warm glows, with no pointer tracking or input-device permissions required
 - Window-close snow bursts enabled
 - Click-through input handling using `Gdk.Window.set_pass_through(True)` and an empty Cairo input region, applied after realize/map
 - User systemd service for background operation, safe shutdown, and journal logs
@@ -27,6 +27,12 @@ This downloads and runs the remote installer, which fetches the latest source fr
 **Requirements:** `curl` or `wget`, `tar`, Python 3, GTK3, PyGObject, PyCairo, and gtk-layer-shell. The remote installer does not use `sudo`; install missing system dependencies separately.
 
 > **Security note:** This downloads and executes the installer from the repository's `main` branch. Review [`install-remote.sh`](https://github.com/maxx-us/FrostWM/blob/main/install-remote.sh) and [`install.sh`](https://github.com/maxx-us/FrostWM/blob/main/install.sh) before running it if you want to inspect what will be executed.
+
+## Changes in 0.8
+
+- Replace unreliable global pointer polling with ambient snow wakes and occasional gentle gusts.
+- Keep the overlay click-through; no raw mouse/touchpad access or extra input permissions are needed.
+- Report ambient effect state and active wakes in `frostwm status`.
 
 ## Fixes in 0.7
 
