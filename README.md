@@ -31,14 +31,24 @@ This downloads and runs the remote installer, which fetches the latest source fr
 
 ## Desktop support
 
-FrostWM uses GTK Layer Shell for a transparent, click-through fullscreen overlay. This works on **KDE Plasma Wayland**, **Niri**, and other compatible Wayland compositors such as **Hyprland, Sway, COSMIC, and Wayfire**. The snow overlay itself is compositor-independent; window-edge accumulation and close bursts currently rely on Niri's IPC and therefore remain Niri-only.
+FrostWM uses GTK Layer Shell for a transparent, click-through fullscreen overlay. This works on **KDE Plasma Wayland**, **Niri**, **River**, and other compatible Wayland compositors such as **Hyprland, Sway, COSMIC, and Wayfire**. The snow overlay itself is compositor-independent; window-edge accumulation and close bursts currently rely on Niri's IPC and therefore remain Niri-only.
 
-**Not supported by this backend:** GNOME on Wayland and X11 desktops, because they do not provide the required GTK Layer Shell protocol. FrostWM detects the current desktop for diagnostics, but that detection does not add support for an incompatible compositor.
+### GNOME Shell
+
+GNOME on Wayland uses a separate native Shell extension because it does not expose the GTK Layer Shell protocol. The installer places the extension in your local GNOME extensions directory. Enable it from the Extensions app, or run:
+
+```bash
+gnome-extensions enable frostwm@maxx-us.github.io
+```
+
+If it does not appear immediately, log out and back in, then enable it. This initial GNOME backend provides the snowfall overlay; it does not yet share all Python backend controls or Niri-only effects.
+
+**X11 desktops are not supported yet.** They need a separate X11 overlay backend.
 
 ## Changes in 0.9
 
 - Raise the default animation target from 30 to 60 FPS, with a live `frostwm fps 10..120` setting.
-- Add desktop/backend diagnostics and clarify which effects are Niri-specific versus portable across compatible Wayland compositors.
+- Add desktop/backend diagnostics, document River support, and add an initial native GNOME Shell extension.
 
 ## Changes in 0.8
 
