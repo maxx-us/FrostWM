@@ -360,9 +360,25 @@ class FrostWM(Gtk.Window):
 
         if not by_column:
             return {}
-        # A stacked column can contain hidden tabs whose actual visible tile is
-        # not exposed by this IPC version. Never place snow on guessed tab edges.
-        if any(len(items) != 1 for items in by_column.values()):
+        # In tabbed columns, Niri may report several windows at the same
+        # scrolling-layout column. Only the focused window is guaranteed visible;
+        # use it for that column rather than rejecting the entire workspace.
+        visible_by_column = {}
+        for col, items in by_column.items():
+            if len(items) == 1:
+                visible_by_column[col] = items[0]
+                continue
+            focused_ids = {
+                str(win.get("id", "")) for win in windows
+                if isinstance(win, dict) and win.get("is_focused")
+            }
+            focused_items = [item for item in items if item[1] in focused_ids]
+            if len(focused_items) != 1:
+                # Hidden tabs have no independently reliable screen rectangle.
+                continue
+            visible_by_column[col] = focused_items[0]
+        by_column = {col: [item] for col, item in visible_by_column.items()}
+        if not by_column:
             return {}
         columns = sorted(by_column)
         if columns != list(range(1, len(columns) + 1)):
