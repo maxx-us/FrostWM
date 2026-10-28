@@ -129,6 +129,7 @@ FrostWM controls (no terminal needs to remain open):
   frostwm disable-startup Disable automatic login start
   frostwm restart         Restart overlay
   frostwm logs [lines]    Read service logs
+  frostwm update          Install latest version and restart
 HELP
     ;;
 esac
