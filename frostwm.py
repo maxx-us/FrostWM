@@ -142,6 +142,7 @@ class FrostWM(Gtk.Window):
         self.enabled = bool(self.cfg["enabled"])
         self.windows = {}
         self._niri_snapshot = []
+        self._scroll_offset_diagnostic_logged = False
         self.bursts = []
         self._cmd_server = None
         self._socket_path = Path(self.cfg["socket"])
@@ -247,6 +248,33 @@ class FrostWM(Gtk.Window):
                 continue
             proc = None
             try:
+                # Check the workspace IPC schema once per connection. Niri 26.04
+                # may omit scrolling_view_pos entirely; jq renders both a missing
+                # field and an explicit null as null, so report either as unavailable.
+                try:
+                    probe = subprocess.run(
+                        ["niri", "msg", "--json", "workspaces"],
+                        capture_output=True, text=True, timeout=2, check=False,
+                    )
+                    workspaces = json.loads(probe.stdout) if probe.returncode == 0 else None
+                    if isinstance(workspaces, list) and workspaces:
+                        has_offset = any(
+                            isinstance(ws, dict) and ws.get("scrolling_view_pos") is not None
+                            for ws in workspaces
+                        )
+                        if has_offset:
+                            print("FrostWM: Niri workspace scroll offset is available", flush=True)
+                        else:
+                            print(
+                                "FrostWM: Niri IPC has no usable scrolling_view_pos; "
+                                "scrolled tiled-window ledges cannot be positioned reliably "
+                                "(Niri 26.04 limitation)",
+                                flush=True,
+                            )
+                    else:
+                        print("FrostWM: could not inspect Niri workspace scroll-offset support", flush=True)
+                except Exception as exc:
+                    print(f"FrostWM: scroll-offset capability check failed: {exc}", flush=True)
                 proc = subprocess.Popen(
                     ["niri", "msg", "--json", "event-stream"],
                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
