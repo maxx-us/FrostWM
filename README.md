@@ -6,7 +6,8 @@ FrostWM is a transparent, click-through snowfall overlay for GTK3 and Wayland co
 
 - Snowfall enabled
 - Style: **Cozy Winter** — cream-white flakes, a few warm flakes, and subtle amber edge glow
-- Intensity: **35%** (about 77 particles when the maximum is 220)\n- Animation target: **60 FPS** by default; configurable from 10 to 120 FPS (actual rate depends on compositor, display refresh, and system load)
+- Intensity: **35%** (about 77 particles when the maximum is 220)
+- Animation target: **60 FPS** by default; configurable from 10 to 120 FPS (actual rate depends on compositor, display refresh, and system load)
 - Wind: **25%**
 - Window-edge accumulation enabled, with a 4 px target and 8 px hard maximum
 - Ambient mouse-like effects: localized snow swirls, gentle gusts, and soft warm glows, with no pointer tracking or input-device permissions required
@@ -109,7 +110,8 @@ frostwm gust            # Trigger a gust
 frostwm intensity 0     # Turn snowfall density to zero
 frostwm intensity 50    # 50% density
 frostwm intensity 100   # Full density
-frostwm wind 25         # Wind strength, 0..100\nfrostwm fps 60          # Animation target FPS, 10..120
+frostwm wind 25         # Wind strength, 0..100
+frostwm fps 60          # Animation target FPS, 10..120
 frostwm enable          # Start service automatically at login
 frostwm disable-startup # Disable automatic login start
 frostwm restart         # Restart service
