@@ -26,7 +26,7 @@ DEFAULTS = {
     "intensity": 50,
     "wind_strength": 25,
     "fps": 60,
-    "max_particles": 360,
+    "max_particles": 260,
     "min_speed": 18.0,
     "max_speed": 72.0,
     "flake_min_radius": 1.1,
@@ -44,21 +44,21 @@ DEFAULTS = {
 PRESETS = {
     "gentle": {
         "style": "Gentle Snow", "intensity": 22, "wind_strength": 8,
-        "fps": 45, "max_particles": 280, "min_speed": 10.0,
+        "fps": 45, "max_particles": 220, "min_speed": 10.0,
         "max_speed": 34.0, "flake_min_radius": 0.9,
         "flake_max_radius": 2.8, "opacity": 0.82,
         "close_burst": False, "window_ledges": False, "mouse_effects": False,
     },
     "cozy": {
         "style": "Cozy Winter", "intensity": 35, "wind_strength": 25,
-        "fps": 60, "max_particles": 360, "min_speed": 18.0,
+        "fps": 60, "max_particles": 260, "min_speed": 18.0,
         "max_speed": 72.0, "flake_min_radius": 1.1,
         "flake_max_radius": 3.4, "opacity": 0.90,
         "close_burst": True, "window_ledges": True, "mouse_effects": True,
     },
     "blizzard": {
         "style": "Blizzard", "intensity": 90, "wind_strength": 78,
-        "fps": 60, "max_particles": 500, "min_speed": 38.0,
+        "fps": 60, "max_particles": 360, "min_speed": 38.0,
         "max_speed": 125.0, "flake_min_radius": 0.9,
         "flake_max_radius": 3.0, "opacity": 0.94,
         "close_burst": True, "window_ledges": True, "mouse_effects": True,
@@ -100,7 +100,7 @@ class Flake:
         # wind-stretched flakes. Shape stays fixed for each particle's lifetime.
         self.shape = random.choices(
             ("speck", "crystal", "plate", "needle", "cluster"),
-            weights=(18, 36, 20, 12, 14), k=1
+            weights=(25, 28, 20, 12, 15), k=1
         )[0]
         self.stretch = random.uniform(1.35, 2.2)
         self.alpha = random.uniform(.62, 1.0)
@@ -687,14 +687,14 @@ class FrostWM(Gtk.Window):
 
             if f.shape == "crystal":
                 arm = max(3.0, f.r * 2.8)
-                branch = arm * .34
+                branch = arm * .25
                 for arm_index in range(6):
                     angle = arm_index * math.tau / 6
                     ux, uy = math.cos(angle), math.sin(angle)
                     cr.move_to(-ux * arm * .15, -uy * arm * .15)
                     cr.line_to(ux * arm, uy * arm)
                     for direction in (-1, 1):
-                        bx, by = ux * arm * .57, uy * arm * .57
+                        bx, by = ux * arm * .62, uy * arm * .62
                         ba = angle + direction * math.pi * .72
                         cr.move_to(bx, by)
                         cr.line_to(bx + math.cos(ba) * branch,
@@ -769,16 +769,17 @@ class FrostWM(Gtk.Window):
                     x, y, width = float(win["x"]), float(win["y"]), float(win["width"])
                     depth = max(1.0, min(float(self.cfg["ledge_max_depth"]), float(win.get("depth", 1))))
                     if width > 20 and -8 < y < self.height:
-                        cr.set_source_rgba(1.0, .96, .87, .88)
-                        cr.set_line_width(depth)
+                        # Draw a clear, high-contrast snow cap along each tracked top edge.
+                        cr.set_source_rgba(.98, .99, 1.0, .98)
+                        cr.set_line_width(max(3.0, depth + 1.5))
                         cr.move_to(x, y + depth / 2)
                         cr.line_to(x + width, y + depth / 2)
                         cr.stroke()
                         # tiny rounded snow mounds
-                        cr.set_source_rgba(1, .99, .94, .92)
+                        cr.set_source_rgba(1, 1, 1, .98)
                         for j in range(max(1, int(width // 70))):
                             mx = x + (j + .5) * width / max(1, int(width // 70))
-                            cr.arc(mx, y, depth * .6, math.pi, math.tau)
+                            cr.arc(mx, y, max(2.0, depth * .8), math.pi, math.tau)
                             cr.fill()
                 except (KeyError, TypeError, ValueError):
                     continue
