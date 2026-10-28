@@ -5,7 +5,7 @@ FrostWM is a transparent, click-through snowfall overlay for GTK3 and Wayland co
 ## ✨ Features and defaults
 
 - Snowfall enabled
-- Particle redesign: larger flakes are drawn as six-armed crystals with fine branches and a gently shifting rotation; tiny distant flakes remain soft specks
+- Varied particle shapes: six-armed branching crystals, hexagonal plates, slender ice needles, intersecting crystal clusters, and tiny distant specks
 - Style: **Cozy Winter** — cream-white flakes, a few warm flakes, and subtle amber edge glow
 - Three live presets: **Gentle Snow**, **Cozy Winter**, and **Blizzard**; each adjusts density, speed, wind, particle size, opacity, FPS, and optional effects together
 - Intensity: **35%** (about 77 particles when the maximum is 220)
@@ -59,7 +59,7 @@ You can still fine-tune individual settings afterward with commands such as `fro
 
 ## Changes in 0.9
 
-- Replace the old dot-and-streak particles with detailed six-armed snow crystals, subtle branching, and individual rotation.
+- Replace dot-and-streak particles with a varied mix of six-armed crystals, hexagonal plates, slender needles, intersecting crystal clusters, and distant specks.
 - Raise the default animation target from 30 to 60 FPS, with a live `frostwm fps 10..120` setting.
 - Add desktop/backend diagnostics, document River support, and add an initial native GNOME Shell extension.
 
