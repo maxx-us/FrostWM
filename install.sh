@@ -11,7 +11,7 @@ install -m 755 "$ROOT/bin/frostwm" "$HOME/.local/bin/frostwm"
 install -m 644 "$ROOT/systemd/frostwm.service" "$HOME/.config/systemd/user/frostwm.service"
 install -m 755 "$ROOT/waybar/frostwm" "$HOME/.config/waybar/scripts/frostwm"
 systemctl --user daemon-reload
-echo "Installed FrostWM 0.8."
+echo "Installed FrostWM 0.9."
 echo "Ensure ~/.local/bin is on PATH; in zsh add: export PATH=\"\$HOME/.local/bin:\$PATH\""
 echo "Start it with: frostwm start"
 echo "Optional autostart: frostwm enable"
