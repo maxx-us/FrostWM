@@ -453,40 +453,50 @@ class FrostWM(Gtk.Window):
         # the pairs directly as the event payload. Accept both forms.
         if key == "windowlayoutschanged":
             changes = payload if isinstance(payload, list) else data.get("changes", [])
-            if isinstance(changes, list):
-                for item in changes:
-                    if not isinstance(item, (list, tuple)) or len(item) != 2:
-                        continue
-                    wid, layout = str(item[0]), item[1]
-                    old_window = self.windows.get(wid, {})
-                    if isinstance(layout, dict):
-                        self._remember_window(wid, {
-                            "id": wid, "title": old_window.get("title", ""),
-                            "workspace_id": old_window.get("workspace_id"),
-                        }, layout_override=layout)
-                        # If Niri supplies null visual coordinates (common for
-                        # tiled windows), refresh the snapshot and recalculate
-                        # the conservative tiled fallback instead of leaving
-                        # the ledge stranded at its previous screen position.
-                        if not self._window_rect({"layout": layout}):
-                            for snapshot_win in self._niri_snapshot:
-                                if isinstance(snapshot_win, dict) and str(snapshot_win.get("id", "")) == wid:
-                                    snapshot_win["layout"] = layout
-                                    break
-                            focused = next((w for w in self._niri_snapshot
-                                            if isinstance(w, dict) and w.get("is_focused")), None)
-                            active_ws = focused.get("workspace_id") if focused else None
-                            visible = [w for w in self._niri_snapshot
-                                       if isinstance(w, dict)
-                                       and (active_ws is None or w.get("workspace_id") == active_ws)]
-                            fallback = self._fallback_tiled_rects(visible)
-                            for snapshot_win in visible:
-                                sid = str(snapshot_win.get("id", ""))
-                                rect = self._window_rect(snapshot_win) or fallback.get(sid)
-                                if sid and rect and sid in self.windows:
-                                    depth = self.windows[sid].get("depth", 1.0)
-                                    self.windows[sid].update(rect)
-                                    self.windows[sid]["depth"] = depth
+            if not isinstance(changes, list):
+                print(f"FrostWM: unexpected WindowLayoutsChanged payload type={type(payload).__name__} keys={list(data)[:8]}", flush=True)
+                return GLib.SOURCE_REMOVE
+            updated = 0
+            for item in changes:
+                if not isinstance(item, (list, tuple)) or len(item) != 2:
+                    print(f"FrostWM: unexpected layout change item={str(item)[:240]}", flush=True)
+                    continue
+                wid, layout = str(item[0]), item[1]
+                old_window = self.windows.get(wid, {})
+                if not isinstance(layout, dict):
+                    print(f"FrostWM: layout for window {wid} has type={type(layout).__name__}", flush=True)
+                    continue
+                before = {k: old_window.get(k) for k in ("x", "y", "width", "height")}
+                self._remember_window(wid, {
+                    "id": wid, "title": old_window.get("title", ""),
+                    "workspace_id": old_window.get("workspace_id"),
+                }, layout_override=layout)
+                after = self.windows.get(wid, {})
+                if any(after.get(k) != before.get(k) for k in ("x", "y", "width", "height")):
+                    updated += 1
+                # If Niri supplies null visual coordinates (common for tiled
+                # windows), refresh the snapshot and recalculate the conservative
+                # tiled fallback instead of leaving the ledge stranded.
+                if not self._window_rect({"layout": layout}):
+                    for snapshot_win in self._niri_snapshot:
+                        if isinstance(snapshot_win, dict) and str(snapshot_win.get("id", "")) == wid:
+                            snapshot_win["layout"] = layout
+                            break
+                    focused = next((w for w in self._niri_snapshot
+                                    if isinstance(w, dict) and w.get("is_focused")), None)
+                    active_ws = focused.get("workspace_id") if focused else None
+                    visible = [w for w in self._niri_snapshot
+                               if isinstance(w, dict)
+                               and (active_ws is None or w.get("workspace_id") == active_ws)]
+                    fallback = self._fallback_tiled_rects(visible)
+                    for snapshot_win in visible:
+                        sid = str(snapshot_win.get("id", ""))
+                        rect = self._window_rect(snapshot_win) or fallback.get(sid)
+                        if sid and rect and sid in self.windows:
+                            depth = self.windows[sid].get("depth", 1.0)
+                            self.windows[sid].update(rect)
+                            self.windows[sid]["depth"] = depth
+            print(f"FrostWM: WindowLayoutsChanged items={len(changes)} rects_updated={updated}", flush=True)
             return GLib.SOURCE_REMOVE
 
         # Metadata updates may carry a full window object with geometry nested in layout.
